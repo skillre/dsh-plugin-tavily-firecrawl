@@ -44,7 +44,9 @@ Removed legacy install paths (not restored):
 - `tavily-firecrawl.patch.yml` and `enable-web-fetch-default.patch.yml` (duplicate/overlay patch
   forms; the shipped bundle patch is the only wiring);
 - `presets/standard-web` (a fork of a shipped preset; DSH ≥ 0.1.5 presets already set
-  `tool-web.fetch: true`, so a fork is pure drift risk);
+  `tool-web.fetch: true`, so a fork is pure drift risk; moreover nothing reads
+  `$DSH_HOME/.agent-presets/` on current DSH — presets are bundle-declared `preset-<id>`
+  rows now, so the legacy copy-directory install step is a no-op);
 - the stale packaged `*.tgz`, the source `node_modules` snapshot and the pre-migration history.
 
 Not yet published. `compatibility.json` records the passed DSH `0.1.7-rc.2` mount verification

@@ -244,7 +244,7 @@ Peer range 不是兼容性证据。写入证据后必须重新生成并挂载将
 
 - `install.sh` / `uninstall.sh`（基于符号链接与文件复制的 profile 安装，舰队禁止）；
 - `tavily-firecrawl.patch.yml`、`enable-web-fetch-default.patch.yml`（重复/叠加的 patch 形态）；
-- `presets/standard-web`（官方预设的 fork；DSH ≥ 0.1.5 的自带预设已设 `tool-web.fetch: true`，fork 只会带来漂移风险）；
+- `presets/standard-web`（官方预设的 fork；DSH ≥ 0.1.5 的自带预设已设 `tool-web.fetch: true`，fork 只会带来漂移风险；且 `$DSH_HOME/.agent-presets/` 目录已不被任何组件读取——现代预设是 bundle 声明的 `preset-<id>` 行，旧安装脚本"复制目录即生效"的动作在当前 DSH 上是无效操作）；
 - 打包的旧 `*.tgz`。
 
 **迁移顺序**：先卸载独立包再安装本包——两者都会向 `ctx.web` 注册 id 为 `tavily` / `firecrawl` 的 provider，第二个 `apply` 会因 `WEB_DUPLICATE_PROVIDER` 使对应行激活失败：

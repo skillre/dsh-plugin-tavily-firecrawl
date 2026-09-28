@@ -245,7 +245,7 @@ This package is the successor of the standalone `dsh-tavily-firecrawl@0.2.0` rep
 
 - `install.sh` / `uninstall.sh` (symlink- and copy-based profile installs, forbidden by fleet policy);
 - `tavily-firecrawl.patch.yml`, `enable-web-fetch-default.patch.yml` (duplicate/overlay patch forms);
-- `presets/standard-web` (a fork of a shipped preset; DSH ≥ 0.1.5 already sets `tool-web.fetch: true`, so a fork is pure drift risk);
+- `presets/standard-web` (a fork of a shipped preset; DSH ≥ 0.1.5 already sets `tool-web.fetch: true`, so a fork is pure drift risk; also, nothing reads `$DSH_HOME/.agent-presets/` any more — a modern preset is a bundle-declared `preset-<id>` row, so the legacy install script's "copy the directory" step is a no-op on current DSH);
 - the stale packaged `*.tgz`.
 
 **Migration order**: remove the standalone package before installing this one — both register `ctx.web` providers with ids `tavily` / `firecrawl`, so the second `apply` throws `WEB_DUPLICATE_PROVIDER` and that row fails to activate:
