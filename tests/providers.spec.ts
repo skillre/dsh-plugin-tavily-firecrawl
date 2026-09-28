@@ -2,8 +2,9 @@
  * Provider tests against a local mock of the Tavily and Firecrawl APIs: no
  * external network, no real credentials, and full control over which status
  * each key receives. Ported from the standalone `dsh-tavily-firecrawl`
- * node:test suite; every case and assertion is preserved, plus one added case
- * that pins the versioned attribution header.
+ * node:test suite; every case and assertion is preserved, plus added cases
+ * that pin the versioned attribution header and the malformed-2xx-body error
+ * path (one unit case, one end-to-end case).
  */
 import { readFileSync } from 'node:fs'
 import { createServer } from 'node:http'
