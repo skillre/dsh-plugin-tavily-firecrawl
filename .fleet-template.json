@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "fleetOwner": "skillre",
+  "slug": "tavily-firecrawl",
+  "templateVersion": "0.5.0",
+  "templateDigest": "sha256:10a9195854782dc1667f48c8754f8ef22a2af4003f21a362f85b4d7a67e91071",
+  "policyVersion": "0.5.0",
+  "policyDigest": "sha256:6711470c7d6f618ff97351e3edffcacd300b3913adfd38a0e4a67e992babd673",
+  "createdAt": "2026-09-28",
+  "createdWithDsh": "0.1.7-rc.2"
+}

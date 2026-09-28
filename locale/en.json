@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Tavily Search + Firecrawl Fetch",
+    "description": "Tavily search and Firecrawl fetch providers for the DeepSeek Harness web seam, with a rotating multi-key credential pool"
+  }
+}

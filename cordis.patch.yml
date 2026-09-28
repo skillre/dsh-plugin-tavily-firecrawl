@@ -1,0 +1,21 @@
+# @skillre/dsh-plugin-tavily-firecrawl bundle patch: register the Tavily search
+# provider and the Firecrawl fetch provider, pin web_search/web_fetch to them,
+# and disable the shipped DeepSeek native search so the two never fight over
+# selection.
+- insert:
+    - id: skillre-tavily-firecrawl
+      name: '@skillre/dsh-plugin-tavily-firecrawl'
+      config:
+        search:
+          # Tavily bills 1 credit per search at `basic` and 2 at `advanced`;
+          # `basic` is the default because free plans are small. Switch to
+          # `advanced` here when deeper retrieval is worth the extra credit.
+          searchDepth: basic
+
+- id: web
+  config:
+    searchProvider: tavily
+    fetchProvider: firecrawl
+
+- id: web-search-deepseek
+  disabled: true
