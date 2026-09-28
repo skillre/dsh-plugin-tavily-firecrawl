@@ -22,6 +22,7 @@ const KEY = {
   badRequest: 'tvly-badrequest-0000000000',
   ok: 'tvly-primary-0000000000000',
   second: 'tvly-secondary-000000000000',
+  malformed: 'tvly-malformed-00000000000',
   fcQuota: 'fc-quota-00000000000000000',
   fcInvalid: 'fc-invalid-000000000000000',
   fcBadRequest: 'fc-badrequest-00000000000',
@@ -64,6 +65,9 @@ beforeAll(async () => {
         if (key.startsWith('tvly-invalid')) return send(response, 401, tavilyError('Unauthorized: missing or invalid API key.'))
         if (key === KEY.badRequest) return send(response, 400, tavilyError("Invalid topic. Must be 'general' or 'news'."))
         if (key === KEY.second) return send(response, 200, { answer: 'second answer', results: [{ url: 'https://example.com/b' }] })
+        // A 200 whose `results` is not an array: the API claims success but
+        // the body is unusable, which must surface as a provider error.
+        if (key === KEY.malformed) return send(response, 200, { results: {} })
         return send(response, 200, {
           answer: '42',
           results: [
@@ -216,6 +220,25 @@ describe('tavily provider', () => {
     expect(result.content).toBeUndefined()
     expect(result.sources).toEqual([{ url: 'https://a/', snippet: 'short' }])
     expect(result.truncated).toBe(false)
+  })
+
+  it('mapTavilyResponse throws on a malformed body instead of returning an empty result', () => {
+    // Reference semantics from the standalone 0.2.0 implementation: `?? []`
+    // tolerates absent/null `results`, everything structurally broken throws.
+    expect(() => mapTavilyResponse(null)).toThrow(TypeError)
+    expect(() => mapTavilyResponse(undefined)).toThrow(TypeError)
+    expect(() => mapTavilyResponse({ results: {} })).toThrow(TypeError)
+    expect(() => mapTavilyResponse({ results: 'not-an-array' })).toThrow(TypeError)
+    expect(() => mapTavilyResponse({ results: [null] })).toThrow(TypeError)
+    expect(mapTavilyResponse({ results: undefined })).toEqual({ sources: [], truncated: false })
+    expect(mapTavilyResponse({ results: null })).toEqual({ sources: [], truncated: false })
+  })
+
+  it('a malformed 2xx body is a provider error, not an empty search result', async () => {
+    const provider = tavily({ apiKey: KEY.malformed })
+    const error = await rejectionOf(provider.search({ query: 'hello' }))
+    expect(error.code).toBe('WEB_PROVIDER_ERROR')
+    expect(error.message).toMatch(/unprocessable response body/)
   })
 
   it('tavilyErrorMessage understands every envelope Tavily uses', () => {

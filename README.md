@@ -202,7 +202,7 @@ FIRECRAWL_API_KEYS=fc-aaaa;fc-bbbb
 |---|---|---|---|
 | 0.1.7-rc.2 | 挂载验证通过 | 2026-09-28 | 由舰队集成方在隔离 profile 中执行 `--dump-config` + 有界真实启动 |
 
-机器可读证据记录在 `compatibility.json`（当前 `verified: []`，待集成方写入真实记录后再发布）：
+机器可读证据记录在 `compatibility.json`（已记录 `0.1.7-rc.2` / `passed` / `2026-09-28`，checks 含 `dump-config`、`bounded-startup`、`display-metadata`；下面只是每条记录的形状）：
 
 ```json
 {
@@ -235,6 +235,7 @@ Peer range 不是兼容性证据。写入证据后必须重新生成并挂载将
 - 搜索 snippet 一律截断到 600 字符。
 - `searchEnabled: false` 时必须在用户自己的 profile 覆盖层里同时解开 `web.searchProvider` 的钉住，否则搜索会以 `WEB_PROVIDER_CONFIGURED_MISSING` 失败。
 - 被爬页面的非 2xx 状态按 seam 契约作为**结果**返回，不会变成错误。
+- bundle patch 里的 `web` / `web-search-deepseek` 目标行由官方 `@deepseek-ai/dsh-base` 提供；在缺少这些行的手工 profile 上，loader 会告警并跳过对应条目（钉住不生效），而本行仍会因 `inject: ['web']` 等待服务。
 - 不支持 Windows 原生安装（建议 WSL）；Node 需满足 `engines.node`。
 
 ## 迁移与历史
@@ -245,6 +246,13 @@ Peer range 不是兼容性证据。写入证据后必须重新生成并挂载将
 - `tavily-firecrawl.patch.yml`、`enable-web-fetch-default.patch.yml`（重复/叠加的 patch 形态）；
 - `presets/standard-web`（官方预设的 fork；DSH ≥ 0.1.5 的自带预设已设 `tool-web.fetch: true`，fork 只会带来漂移风险）；
 - 打包的旧 `*.tgz`。
+
+**迁移顺序**：先卸载独立包再安装本包——两者都会向 `ctx.web` 注册 id 为 `tavily` / `firecrawl` 的 provider，第二个 `apply` 会因 `WEB_DUPLICATE_PROVIDER` 使对应行激活失败：
+
+```sh
+dsh plugin --profile <profile> remove dsh-tavily-firecrawl
+dsh plugin --profile <profile> add @skillre/dsh-plugin-tavily-firecrawl
+```
 
 ## License
 

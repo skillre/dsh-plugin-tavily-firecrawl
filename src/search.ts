@@ -284,11 +284,26 @@ async function readErrorMessage(response: Response): Promise<string> {
  * @returns the seam's normalized search result.
  */
 export function mapTavilyResponse(payload: unknown): WebSearchResult {
+  // A malformed 2xx body is a provider error, never a silent empty result: the
+  // reference implementation threw a TypeError here (wrapped by `searchWith`
+  // into `WEB_PROVIDER_ERROR … unprocessable response body`), and this port
+  // preserves that contract explicitly instead of narrowing it away.
+  if (payload === null || payload === undefined) {
+    throw new TypeError(`Cannot read properties of ${payload === null ? 'null' : 'undefined'} (reading 'results')`)
+  }
   const envelope = record(payload)
   const listed = envelope.results
-  const results = Array.isArray(listed) ? listed : []
+  // Mirrors `(payload.results ?? [])`: absent/null results are an empty answer;
+  // any other non-array value is malformed and must throw like `.map` would.
+  const results: unknown = listed === null || listed === undefined ? [] : listed
+  if (!Array.isArray(results)) {
+    throw new TypeError('payload.results.map is not a function')
+  }
   const sources: WebSearchSource[] = results
     .map((item) => {
+      if (item === null || item === undefined) {
+        throw new TypeError(`Cannot read properties of ${item === null ? 'null' : 'undefined'} (reading 'url')`)
+      }
       const result = record(item)
       const source: { url: string, title?: string, snippet?: string, publishedAt?: string } = {
         url: String(result.url ?? ''),

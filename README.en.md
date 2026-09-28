@@ -203,7 +203,7 @@ Cooldowns live in memory and are **cleared by a restart**.
 |---|---|---|---|
 | 0.1.7-rc.2 | Mount verification passed | 2026-09-28 | Isolated-profile `--dump-config` plus a bounded real startup, performed by the fleet integrator |
 
-Machine-readable evidence belongs in `compatibility.json` (currently `verified: []`, to be written by the integrator before release):
+Machine-readable evidence lives in `compatibility.json` (recorded: `0.1.7-rc.2` / `passed` / `2026-09-28`, checks covering `dump-config`, `bounded-startup`, `display-metadata`; the block below only shows the shape of each record):
 
 ```json
 {
@@ -236,6 +236,7 @@ See [UNINSTALL.md](UNINSTALL.md).
 - Search snippets are always capped at 600 characters.
 - With `searchEnabled: false` you must also unpin `web.searchProvider` in your own profile override, or search fails with `WEB_PROVIDER_CONFIGURED_MISSING`.
 - A non-2xx status of the scraped page is returned as a **result**, per the seam's contract.
+- The patch's `web` / `web-search-deepseek` targets ship in `@deepseek-ai/dsh-base`; on a hand-built profile without those rows the loader warns and skips those entries (the pins silently do not apply) while this row still waits on `inject: ['web']`.
 - No native Windows install is supported (use WSL); Node must satisfy `engines.node`.
 
 ## Migration and lineage
@@ -246,6 +247,13 @@ This package is the successor of the standalone `dsh-tavily-firecrawl@0.2.0` rep
 - `tavily-firecrawl.patch.yml`, `enable-web-fetch-default.patch.yml` (duplicate/overlay patch forms);
 - `presets/standard-web` (a fork of a shipped preset; DSH ≥ 0.1.5 already sets `tool-web.fetch: true`, so a fork is pure drift risk);
 - the stale packaged `*.tgz`.
+
+**Migration order**: remove the standalone package before installing this one — both register `ctx.web` providers with ids `tavily` / `firecrawl`, so the second `apply` throws `WEB_DUPLICATE_PROVIDER` and that row fails to activate:
+
+```sh
+dsh plugin --profile <profile> remove dsh-tavily-firecrawl
+dsh plugin --profile <profile> add @skillre/dsh-plugin-tavily-firecrawl
+```
 
 ## License
 

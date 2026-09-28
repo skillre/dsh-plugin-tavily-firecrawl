@@ -47,5 +47,6 @@ Removed legacy install paths (not restored):
   `tool-web.fetch: true`, so a fork is pure drift risk);
 - the stale packaged `*.tgz`, the source `node_modules` snapshot and the pre-migration history.
 
-Not yet published. `compatibility.json` still carries an empty `verified` list: the mount test
-is recorded there before the first release, and the version stays `0.1.0` until then.
+Not yet published. `compatibility.json` records the passed DSH `0.1.7-rc.2` mount verification
+(`2026-09-28`, checks: `dump-config`, `bounded-startup`, `display-metadata`), and the version
+stays `0.1.0` until the first release.
