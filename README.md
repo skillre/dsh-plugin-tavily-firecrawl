@@ -67,7 +67,7 @@ dsh plugin --profile <profile> add @skillre/dsh-plugin-tavily-firecrawl@<version
 4. 将验证后的行为提升为 TypeScript、配置 schema、测试和 Bundle composition。
 5. 所有副作用必须在 stop/update 后清理。
 
-本包使用的运行时契约（`ctx.web` 的 `registerSearchProvider` / `registerFetchProvider` 经 `ctx.effect` 绑定 Fiber、重复 id 抛 `WebError('…already registered', 'WEB_DUPLICATE_PROVIDER')`、选择规则、`WEB_PROVIDER_CONFIGURED_MISSING` / `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`、`search()` 按 `maxResults` 截断 `sources[]` 并置 `truncated`、非 2xx 页面是结果而非异常）均在 DSH `0.1.7-rc.2` 上通过 live Inspect 与随包源码核对，核对日期 `2026-09-28`。
+本包使用的运行时契约（`ctx.web` 的 `registerSearchProvider` / `registerFetchProvider` 经 `ctx.effect` 绑定 Fiber、重复 id 抛 `WebError('…already registered', 'WEB_DUPLICATE_PROVIDER')`、选择规则、`WEB_PROVIDER_CONFIGURED_MISSING` / `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`、`search()` 按 `maxResults` 截断 `sources[]` 并置 `truncated`、非 2xx 页面是结果而非异常）均通过 live Inspect 与随包源码核对：DSH `0.1.7-rc.2`（`2026-09-28`）与 `0.2.0-rc.2`（`2026-09-30` 应用更新后复检，`web` seam 签名逐字一致、随包组成行未变）。
 
 ## Bundle
 
@@ -201,8 +201,9 @@ FIRECRAWL_API_KEYS=fc-aaaa;fc-bbbb
 | DSH 版本 | 结果 | 验证日期 | 说明 |
 |---|---|---|---|
 | 0.1.7-rc.2 | 挂载验证通过 | 2026-09-28 | 由舰队集成方在隔离 profile 中执行 `--dump-config` + 有界真实启动 |
+| 0.2.0-rc.2 | 挂载验证通过 | 2026-09-30 | 应用更新到新线后的复验：0.2.0 运行时先**硬拒绝**了旧的 `<0.2.0` 范围（实验证据已存档），按「DSH 升级」流程重新 Inspect 后扩展 `engines.dsh` 与 peer 范围，再以最终 tarball 通过同一套门禁 |
 
-机器可读证据记录在 `compatibility.json`（已记录 `0.1.7-rc.2` / `passed` / `2026-09-28`，checks 含 `dump-config`、`bounded-startup`、`display-metadata`；下面只是每条记录的形状）：
+机器可读证据记录在 `compatibility.json`（两条 `passed` 记录：`0.1.7-rc.2` / `2026-09-28` 与 `0.2.0-rc.2` / `2026-09-30`，checks 含 `dump-config`、`bounded-startup`、`display-metadata`；下面只是每条记录的形状）：
 
 ```json
 {

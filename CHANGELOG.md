@@ -49,6 +49,7 @@ Removed legacy install paths (not restored):
   rows now, so the legacy copy-directory install step is a no-op);
 - the stale packaged `*.tgz`, the source `node_modules` snapshot and the pre-migration history.
 
-Not yet published. `compatibility.json` records the passed DSH `0.1.7-rc.2` mount verification
-(`2026-09-28`, checks: `dump-config`, `bounded-startup`, `display-metadata`), and the version
-stays `0.1.0` until the first release.
+Not yet published. `compatibility.json` records two passed mount verifications — DSH
+`0.1.7-rc.2` (`2026-09-28`) and `0.2.0-rc.2` (`2026-09-30`; the 0.2.0 runtime initially
+hard-rejected the old `<0.2.0` ranges, which were widened after re-inspection and a
+re-run of the same gates) — and the version stays `0.1.0` until the first release.

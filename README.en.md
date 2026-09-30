@@ -67,7 +67,7 @@ Uninstall and rollback: see [UNINSTALL.md](UNINSTALL.md). This package ships no 
 4. Promote verified behavior into TypeScript, configuration schemas, tests and Bundle composition.
 5. Prove that every side effect is removed on stop or update.
 
-Every runtime contract this package uses (`ctx.web` `registerSearchProvider` / `registerFetchProvider` bound to the current Fiber through `ctx.effect`; duplicate ids throwing `WebError('…already registered', 'WEB_DUPLICATE_PROVIDER')`; the selection rules; `WEB_PROVIDER_CONFIGURED_MISSING` / `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`; `search()` truncating `sources[]` to `maxResults` and setting `truncated`; a non-2xx fetched page being a result rather than a throw) was verified against DSH `0.1.7-rc.2` through live Inspect plus the shipped sources on `2026-09-28`.
+Every runtime contract this package uses (`ctx.web` `registerSearchProvider` / `registerFetchProvider` bound to the current Fiber through `ctx.effect`; duplicate ids throwing `WebError('…already registered', 'WEB_DUPLICATE_PROVIDER')`; the selection rules; `WEB_PROVIDER_CONFIGURED_MISSING` / `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`; `search()` truncating `sources[]` to `maxResults` and setting `truncated`; a non-2xx fetched page being a result rather than a throw) was verified through live Inspect plus the shipped sources on DSH `0.1.7-rc.2` (`2026-09-28`) and again on `0.2.0-rc.2` (`2026-09-30`, after the app updated: identical `web` seam signatures and unchanged shipped composition rows).
 
 ## Bundle identity
 
@@ -202,8 +202,9 @@ Cooldowns live in memory and are **cleared by a restart**.
 | DSH version | Result | Verified | Notes |
 |---|---|---|---|
 | 0.1.7-rc.2 | Mount verification passed | 2026-09-28 | Isolated-profile `--dump-config` plus a bounded real startup, performed by the fleet integrator |
+| 0.2.0-rc.2 | Mount verification passed | 2026-09-30 | Re-verification after the app moved to the new line: 0.2.0 first **hard-rejected** the old `<0.2.0` ranges (experiment archived), then `engines.dsh` and the peer ranges were widened per the DSH-upgrade procedure after re-inspection, and the final tarball passed the same gates |
 
-Machine-readable evidence lives in `compatibility.json` (recorded: `0.1.7-rc.2` / `passed` / `2026-09-28`, checks covering `dump-config`, `bounded-startup`, `display-metadata`; the block below only shows the shape of each record):
+Machine-readable evidence lives in `compatibility.json` (two `passed` records: `0.1.7-rc.2` / `2026-09-28` and `0.2.0-rc.2` / `2026-09-30`, checks covering `dump-config`, `bounded-startup`, `display-metadata`; the block below only shows the shape of each record):
 
 ```json
 {
