@@ -83,7 +83,7 @@
     "@deepseek-ai/dsh-web": "^0.1.7-rc.2 || ^0.2.0-rc.2",
     "@types/node": "^24.13.3",
     "publint": "^0.3.24",
-    "typescript": "5.9.3",
+    "typescript": "7.0.2",
     "vitest": "^4.1.8"
   }
 }
