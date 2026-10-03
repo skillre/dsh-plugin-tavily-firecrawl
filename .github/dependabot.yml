@@ -1,13 +1,22 @@
+# Version updates are reviewed manually by the maintainer, so Dependabot is
+# asked to raise no pull requests: per GitHub's own reference, setting
+# `open-pull-requests-limit` to zero disables version updates for that package
+# manager ("Disabling Dependabot version updates"). The ecosystems stay listed
+# so the file remains a valid, reversible switch — raise the limit again to
+# resume proposals.
+#
+# Note: this limit does not cover *security* update pull requests; those are
+# governed by the repository's Code security settings, not by this file.
 version: 2
 updates:
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
 
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
