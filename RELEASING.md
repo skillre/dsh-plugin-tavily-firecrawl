@@ -23,4 +23,4 @@ The workflow builds and checks the tarball in an unprivileged job and retains th
 
 ## Rollback
 
-Never overwrite an npm version. Deprecate a bad version, tell users which known-good version to pin, and publish a new fix. See `UNINSTALL.md` for profile commands.
+Never overwrite an npm version. Deprecate a bad version, tell users which known-good version to pin, and publish a new fix. See `UNINSTALL.md` for the user-facing uninstall/rollback path (the **Plugins** manager); a CLI/profile recovery is a separately authorized path for when the manager cannot start.

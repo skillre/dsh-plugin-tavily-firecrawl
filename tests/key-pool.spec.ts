@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   KEY_FAILURE,
+  MASK_MIN_KEY_LENGTH,
   KeyPool,
   TRANSIENT_FAILURE,
   classifyHttpStatus,
@@ -13,6 +14,7 @@ import {
   maskKey,
   parseKeyList,
   rotationMessage,
+  trimBaseURL,
 } from '../src/key-pool.js'
 import type { KeyPoolEntry } from '../src/key-pool.js'
 
@@ -42,6 +44,23 @@ describe('key-pool', () => {
   it('maskKey keeps a short key opaque and shows a masked tail otherwise', () => {
     expect(maskKey('short', 0)).toBe('#1')
     expect(maskKey('tvly-dev-abcdefghijklmnop', 1)).toBe('#2 (tvly-d…mnop)')
+  })
+
+  it('maskKey never prints a tail that gives most of a short secret away', () => {
+    // A fixed 6+4 mask on an 11-character key would reveal 10 of its 11
+    // characters, so anything at or below the threshold is named by position.
+    expect(maskKey('tvly-123456', 0)).toBe('#1')
+    expect(maskKey('x'.repeat(MASK_MIN_KEY_LENGTH), 0)).toBe('#1')
+    expect(maskKey('x'.repeat(MASK_MIN_KEY_LENGTH + 1), 0)).toBe('#1 (xxxxxx…xxxx)')
+  })
+
+  it('trimBaseURL removes trailing slashes and nothing else', () => {
+    expect(trimBaseURL('https://api.tavily.com')).toBe('https://api.tavily.com')
+    expect(trimBaseURL('https://api.tavily.com/')).toBe('https://api.tavily.com')
+    expect(trimBaseURL('https://api.tavily.com///')).toBe('https://api.tavily.com')
+    // An unusable base stays unusable so `available()` keeps rejecting it.
+    expect(trimBaseURL('not a url')).toBe('not a url')
+    expect(trimBaseURL('/')).toBe('')
   })
 
   it('formatWait renders seconds, minutes, hours, days, and never', () => {
@@ -145,8 +164,8 @@ describe('key-pool', () => {
 
   it('reasons() lists struck keys, caps the list, and hides untouched keys', () => {
     const pool = new KeyPool([
-      'tvly-aaaaaaaaaaaa',
-      'tvly-bbbbbbbbbbbb',
+      'tvly-aaaaaaaaaaaaaaaa',
+      'tvly-bbbbbbbbbbbbbbbb',
       'tvly-cccccccccccc',
       'tvly-dddddddddddd',
       'tvly-eeeeeeeeeeee',
@@ -172,7 +191,7 @@ describe('key-pool', () => {
   })
 
   it('rotationMessage names the pool state when several keys were tried', () => {
-    const pool = new KeyPool(['tvly-aaaaaaaaaaaa', 'tvly-bbbbbbbbbbbb'], { quotaCooldownMs: 600000 })
+    const pool = new KeyPool(['tvly-aaaaaaaaaaaaaaaa', 'tvly-bbbbbbbbbbbbbbbb'], { quotaCooldownMs: 600000 })
     const first = take(pool)
     const second = take(pool)
     pool.reportFailure(first, KEY_FAILURE.QUOTA, 'HTTP 432: plan limit')
@@ -191,7 +210,7 @@ describe('key-pool', () => {
   })
 
   it('rotationMessage explains a pool with nothing usable before any attempt', () => {
-    const pool = new KeyPool(['tvly-aaaaaaaaaaaa', 'tvly-bbbbbbbbbbbb'])
+    const pool = new KeyPool(['tvly-aaaaaaaaaaaaaaaa', 'tvly-bbbbbbbbbbbbbbbb'])
     pool.reportFailure(take(pool), KEY_FAILURE.INVALID, 'HTTP 401: nope')
     pool.reportFailure(take(pool), KEY_FAILURE.QUOTA, 'HTTP 432: plan limit')
     const message = rotationMessage({ failure: 'Tavily API error', empty: 'Tavily search' }, pool, [], { hint: '' })

@@ -20,6 +20,7 @@ import {
   classifyHttpStatus,
   collectKeys,
   rotationMessage,
+  trimBaseURL,
 } from './key-pool.js'
 import type { CredentialOptions, KeyPoolEntry, KeyRotationOptions, RotationFailure } from './key-pool.js'
 
@@ -102,8 +103,8 @@ export class TavilySearchProvider implements WebSearchProvider {
    * @param options - provider options.
    */
   constructor(options: TavilySearchProviderOptions) {
-    this.options = options
-    this.pool = new KeyPool(collectKeys(options), {
+    this.options = { ...options, baseURL: trimBaseURL(options.baseURL) }
+    this.pool = new KeyPool(collectKeys(this.options), {
       rateLimitCooldownMs: options.rateLimitCooldownMs,
       quotaCooldownMs: options.quotaCooldownMs,
       quotaCooldownMaxMs: options.quotaCooldownMaxMs,

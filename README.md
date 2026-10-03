@@ -4,7 +4,7 @@
 
 Tavily search and Firecrawl fetch providers for the DeepSeek Harness web seam, with a rotating multi-key credential pool
 
-把 DeepSeek Harness 的联网能力换成 **Tavily 搜索 + Firecrawl 抓取** 的组合，并支持**多 API Key 轮询**：一个纯 Host bundle，提供 `ctx.web` 的两个 provider，`dsh plugin add` 一条命令完成安装。
+把 DeepSeek Harness 的联网能力换成 **Tavily 搜索 + Firecrawl 抓取** 的组合，并支持**多 API Key 轮询**：一个纯 Host bundle，提供 `ctx.web` 的两个 provider；最终安装由用户在 DSH 插件管理界面发起。
 
 [English](README.en.md)
 
@@ -24,25 +24,22 @@ Tavily search and Firecrawl fetch providers for the DeepSeek Harness web seam, w
 
 ## 安装
 
-发布后（唯一受支持的安装路径）：
+完成兼容性验证并交付后，**用户**在 DSH Desktop Client 或 Web UI 的 **Plugins/插件管理**中自行选择来源、安装/更新及启用；开发者/agent 不在用户 profile 代装。发布且目标版本兼容、管理器确认可安装时，可输入 npm 包名 `@skillre/dsh-plugin-tavily-firecrawl@<version>`。未发布时，可提供已构建、验证可用的本地包目录或 `.tgz` **绝对路径**，须先确认目标管理器支持。GitHub URL 只有在管理器支持、仓库含安全且自包含的 `prepare` 构建并通过安装验证后才能列为来源；原始 Git 源码不是自动可用的成品。
 
-```sh
-dsh plugin --profile <profile> add @skillre/dsh-plugin-tavily-firecrawl
-```
-
-本地开发内环（**必须走打包 tarball**）：
+仅供开发者临时测试的内环（**自有、可丢弃的非 Desktop profile，必须走打包 tarball**）：
 
 ```sh
 npm install
 npm run check
 npm pack
-dsh plugin --profile <dev-profile> add ./skillre-dsh-plugin-tavily-firecrawl-0.1.0.tgz
+dsh plugin --profile <dev-profile> add ./skillre-dsh-plugin-tavily-firecrawl-<version>.tgz
 dsh --profile <dev-profile> --dump-config
+# 另行进行有界真实启动；测试结束或失败时须执行下述清理。
 ```
 
-不要用 `dsh plugin ... add .`：把源码目录交给 pnpm 会建立源码链接安装，插件因此解析到**自己的** `node_modules` 而不是宿主的，本地一切正常、打包安装却在启动时炸掉整个 profile。`file:<tarball>` 才是受支持的形态，发布前还必须用 `npm pack` 的产物在隔离 profile 中重新挂载验证。
+安装前登记基线与 `finally` 式清理；测试结束（包括失败）停止进程，仅卸载本次安装的 bundle/依赖/选择/配置或清理确认归属的隔离 profile，并核验无残留。用户真实 Desktop/Web profile 的测试须事先同意并仅撤销测试新增状态，不触碰已有安装和数据；测试不是交付。不要用 `dsh plugin ... add .`：源码目录交给 pnpm 会建立源码链接，让插件解析到**自己的** `node_modules`，掩盖宿主 API 漂移。打包 tarball 仅是开发验证路径；清单中的 `file:` 依赖不是用户在界面输入的本地包地址。
 
-安装后填 Key 并重启 dsh（凭据在进程启动时读取一次）：
+用户安装后按其目标运行方式配置自己的 Key 并重启对应 DSH 进程（凭据在进程启动时读取一次）。下列 `dsh web` 仅是**独立 Web UI 的启动示例**，不是 Desktop Client 插件安装命令；Desktop 由 Electron 启动，须先核实其实际环境变量/凭据入口，不要把 CLI 命令或 `.env` 位置直接当成 Desktop 的配置指引：
 
 ```sh
 # 任选一层：进程环境、<调用目录>/.env、$DSH_HOME/.env
@@ -51,13 +48,7 @@ FIRECRAWL_API_KEY=fc-xxxx
 dsh web
 ```
 
-更新：
-
-```sh
-dsh plugin --profile <profile> add @skillre/dsh-plugin-tavily-firecrawl@<version>
-```
-
-卸载与回滚见 [UNINSTALL.md](UNINSTALL.md)；本包不提供 `install.sh` / `uninstall.sh`，也不使用 `--patch` 叠加层。
+更新：由用户在同一 **Plugins/插件管理**中选择经验证兼容的新版本并确认；不要由 agent 在用户 profile 执行 CLI 安装。卸载与回滚见 [UNINSTALL.md](UNINSTALL.md)；本包不提供 `install.sh` / `uninstall.sh`，也不使用 `--patch` 叠加层。
 
 ## 开发原则
 
@@ -97,13 +88,14 @@ DSH 读取插件卡片信息时**不激活插件**，所以这些资源必须随
 
 - 卡片标题：`Tavily Search + Firecrawl Fetch`
 - 卡片描述：`Tavily search and Firecrawl fetch providers for the DeepSeek Harness web seam, with a rotating multi-key credential pool`
-- 图标：`icon.svg`（DSH 舰队默认图标）
+- 图标：`icon.svg`（DSH 舰队默认图标，发布前应换成本插件自己的图标）
+- 随包 locale：**仅 `locale/en.json`**，因此插件卡片的标题/描述目前只有英文（本 README 有中文版，卡片文案没有）
 
-`package.json#dsh.manifestVersion` 为 `1`。`engines.dsh` 声明本包真实挂载验证过的 DSH 行：range 只是文档，不是证据。
+`package.json#dsh.manifestVersion` 为 `1`。`engines.dsh` 声明本包真实挂载验证过的 DSH 行：range 只是文档，不是证据，实际挂载并记录在 `compatibility.json` 的只有 `0.1.7-rc.2`（2026-09-28）与 `0.2.0-rc.2`（2026-09-30）两个确切版本。
 
 ## 配置
 
-在 patch 行的 `config:` 里覆盖（全部可选）：
+在 patch 行的 `config:` 里覆盖（全部可选）。**下面的数值是示例，不是默认值** —— 默认值见紧随其后的表格；没写到的键一律沿用默认值。
 
 ```yaml
 - insert:
@@ -144,7 +136,7 @@ DSH 读取插件卡片信息时**不激活插件**，所以这些资源必须随
 | `search.baseURL` | `https://api.tavily.com` | 追加 `/search` |
 | `search.searchDepth` | `basic` | Tavily 每次搜索 1 credit（`advanced` 2 credits） |
 | `search.includeAnswer` | `true` | 生成摘要，成为结果的 `content` |
-| `search.maxResults` | 未设置 | 只有 `web_search` 请求带 `maxResults` 时才限制 |
+| `search.maxResults` | 未设置 | 只有 `web_search` 请求带 `maxResults` 时才限制；不设置就不发 `max_results`，由 Tavily 服务端默认条数兜底 |
 | `search.timeoutMs` | `30000` | 每次尝试 |
 | `search.maxAttempts` | Key 数量 | 一次调用最多消耗几个 Key |
 | `search.rateLimitCooldownMs` | `60000` | 429 冷却 |
@@ -158,6 +150,8 @@ DSH 读取插件卡片信息时**不激活插件**，所以这些资源必须随
 | `searchEnabled` / `fetchEnabled` | `true` | 关掉即不注册该侧 provider |
 
 Schema 会**大声失败**：类型不符、`searchDepth` 非 `basic`/`advanced`、`maxBodyChars: 0` 等都会在加载时抛错，而不是被静默忽略。
+
+**未知键同样会被拒绝**：Schemastery 的 object schema 会原样保留它不认识的键，因此光靠 schema 挡不住拼写错误。`apply` 会把 schema 未声明的键（根级、`search.*`、`fetch.*`）列出来并抛错，例如 `serach:`、`searchDepthh:`、`fetch.maxBodyChar`，整行不会挂载 —— 允许的键集合与 schema 由同一份字段表生成，不会漂移。
 
 **凭据解析顺序**（每侧独立）：
 
@@ -219,8 +213,9 @@ Peer range 不是兼容性证据。写入证据后必须重新生成并挂载将
 ## 安全与权限
 
 - **网络出口**：仅出站 HTTPS 到 `api.tavily.com`（`POST /search`）与 `api.firecrawl.dev`（`POST /v1/scrape`）。请求使用 `redirect: 'error'`，重定向直接失败。没有其他网络访问。
-- **凭据/机密**：`TAVILY_API_KEY(S)`、`FIRECRAWL_API_KEY(S)`，或配置里的 `apiKeys` / `apiKey`。密钥只放在 `Authorization: Bearer …` 与 Tavily 请求体的 `api_key` 字段里；错误消息、日志和工具输出只出现**脱敏标签**（如 `#2 (tvly-d…1111)`），不会打印可用密钥。
+- **凭据/机密**：`TAVILY_API_KEY(S)`、`FIRECRAWL_API_KEY(S)`，或配置里的 `apiKeys` / `apiKey`。密钥只放在 `Authorization: Bearer …` 与 Tavily 请求体的 `api_key` 字段里；错误消息、日志和工具输出只出现**脱敏标签**（如 `#2 (tvly-d…1111)`），不会打印可用密钥。脱敏标签只对长度 > 20 位的 Key 显示首 6 + 末 4 位，更短的 Key 只显示序号（`#2`），避免固定长度的掩码反而把短密钥几乎完整地印出来。
 - **文件系统**：不写任何文件；只在启动时读一次随包发布的 `package.json` 作为 User-Agent 版本号（`skillre-tavily-firecrawl/<version> (tavily|firecrawl)`）。不读取凭据文件——launch environment 快照由 launcher 提供。
+- **日志**：加载时如果某侧已启用却没有任何凭据，会经 `ctx.logger.warn` 打一条不含量、只含配置键名的提示（例如 `tavily search registered without an API key: …`），用于在第一次工具调用失败之前暴露缺配置；除此之外无任何运行期日志输出。
 - **配置层风险**：写在插件 `config:` 里的 `apiKey`/`apiKeys` 会出现在 `dsh --dump-config` 输出中，**优先用环境变量**。
 - **生命周期**：凭据与冷却状态都在插件加载时确定；所有 provider 注册都经 `ctx.web` 绑定当前 Fiber，stop/update 后移除（重新 `apply` 不会因重复 id 而失败，因为 seam 在 Fiber 销毁时注销 provider）。
 
@@ -231,10 +226,13 @@ Peer range 不是兼容性证据。写入证据后必须重新生成并挂载将
 ## 已知限制
 
 - 冷却状态在内存中，重启 dsh 即清空（配额类错误也因此可能被提前重试）。
-- Key 池为空时，`available()` 为 `false`，seam 只会给出通用的 `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`；带每个 Key 状态与恢复时间的详细消息需要**至少一个 Key**。
+- Key 池为空时，`available()` 为 `false`，seam 只会给出通用的 `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`；带每个 Key 状态与恢复时间的详细消息需要**至少一个 Key**。加载时会先打一条 `ctx.logger.warn` 提示该侧没有凭据。
 - Firecrawl 侧只使用 seam 请求的 `url`，忽略其未来可能新增的其它选项（`web_fetch` 工具当前也只发送 `url`）。
 - 搜索 snippet 一律截断到 600 字符。
-- `searchEnabled: false` 时必须在用户自己的 profile 覆盖层里同时解开 `web.searchProvider` 的钉住，否则搜索会以 `WEB_PROVIDER_CONFIGURED_MISSING` 失败。
+- `searchEnabled: false` 时要在用户自己的 profile 覆盖层里**同时做两件事**：解开 `web.searchProvider` 的钉住，并把 `web-search-deepseek` 重新 `disabled: false`（或钉住另一个已装的搜索 provider）。只解开钉住是不够的：本 bundle 已经禁用了自带的搜索 provider，解开后没有任何可用搜索 provider，seam 会以 `WEB_PROVIDER_UNAVAILABLE`（而不是 `WEB_PROVIDER_CONFIGURED_MISSING`）失败。
+- **与 DSH 自带「网页搜索 / DeepSeek 搜索提供方」设置卡的关系**：该卡片编辑的是 `web-search-deepseek` 命名空间（`apiKeyEnv` / `apiKey` / `baseURL` / `maxUses`），**不参与 provider 选择**；选择只由 `web` 行的 `searchProvider` 决定。本 bundle 禁用了 `web-search-deepseek` 行，该插件的 Fiber 不启动，其 settings section 也随之注销，所以**这张卡片会从 设置 → 插件 中消失**（不是失效，是不注册）。如果用户之后自行重新启用该行，卡片会回来、配置也能保存，但因为 `web.searchProvider` 仍被钉在 `tavily`，那些配置**不会被使用也不会报错** —— 需要同时解开钉住才生效。
+- **官方环境变量逃生口在钉住期间无效**：seam 的构造是 `config.searchProvider ?? process.env.DSH_WEB_SEARCH_PROVIDER`，本 bundle 一旦写入 config，`DSH_WEB_SEARCH_PROVIDER` / `DSH_WEB_FETCH_PROVIDER` 就不再被读取。要切换回内置 provider，请改 profile 覆盖层里的 `web.searchProvider`（用户层优先级高于 bundle 层）。
+- **禁用本插件的方式很关键**：Plugins 管理器对 bundle 提供的行只暴露 `unaddressable`（只读），可用的开关是**整包开关**，它移除整个 patch 层 —— 钉住与 `web-search-deepseek` 的禁用会一起消失，自带搜索随即恢复，这是干净的路径。**不要**在用户 `cordis.patch.yml` 里手写 `- id: skillre-tavily-firecrawl / disabled: true`：那只会停掉本行，bundle 层的 `web` 钉住与 `web-search-deepseek` 禁用仍然生效，结果是 `web_search`/`web_fetch` 以 `WEB_PROVIDER_CONFIGURED_MISSING` 失败、内置搜索也仍被禁用。卸载请直接移除整个 bundle（见 [UNINSTALL.md](UNINSTALL.md)）。
 - 被爬页面的非 2xx 状态按 seam 契约作为**结果**返回，不会变成错误。
 - bundle patch 里的 `web` / `web-search-deepseek` 目标行由官方 `@deepseek-ai/dsh-base` 提供；在缺少这些行的手工 profile 上，loader 会告警并跳过对应条目（钉住不生效），而本行仍会因 `inject: ['web']` 等待服务。
 - 不支持 Windows 原生安装（建议 WSL）；Node 需满足 `engines.node`。
@@ -248,12 +246,7 @@ Peer range 不是兼容性证据。写入证据后必须重新生成并挂载将
 - `presets/standard-web`（官方预设的 fork；DSH ≥ 0.1.5 的自带预设已设 `tool-web.fetch: true`，fork 只会带来漂移风险；且 `$DSH_HOME/.agent-presets/` 目录已不被任何组件读取——现代预设是 bundle 声明的 `preset-<id>` 行，旧安装脚本"复制目录即生效"的动作在当前 DSH 上是无效操作）；
 - 打包的旧 `*.tgz`。
 
-**迁移顺序**：先卸载独立包再安装本包——两者都会向 `ctx.web` 注册 id 为 `tavily` / `firecrawl` 的 provider，第二个 `apply` 会因 `WEB_DUPLICATE_PROVIDER` 使对应行激活失败：
-
-```sh
-dsh plugin --profile <profile> remove dsh-tavily-firecrawl
-dsh plugin --profile <profile> add @skillre/dsh-plugin-tavily-firecrawl
-```
+**迁移顺序**：由用户先在 Desktop Client/Web UI **Plugins/插件管理**中确认备份与依赖，然后卸载自己安装的旧独立包 `dsh-tavily-firecrawl`；再在同一界面选择已验证可安装的新包 `@skillre/dsh-plugin-tavily-firecrawl@<version>`，确认安装并检查 provider 状态。两者都会向 `ctx.web` 注册 id 为 `tavily` / `firecrawl` 的 provider，并存时第二个 `apply` 会因 `WEB_DUPLICATE_PROVIDER` 失败。开发者/agent 不代用户卸载已有插件或代装新包；管理界面不可用时只有经用户授权的恢复流程才可使用 CLI。
 
 ## License
 

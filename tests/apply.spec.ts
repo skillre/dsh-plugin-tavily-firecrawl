@@ -34,13 +34,15 @@ function only<T>(providers: readonly T[]): T {
 
 /**
  * A minimal stand-in for the context the loader hands `apply`: the web seam's
- * two registration points and the launch-environment snapshot. The double is
- * asserted into the seam's shape deliberately, because a real Cordis `Context`
- * carries the whole plugin runtime and only these members are read.
+ * two registration points, the launch-environment snapshot and the logger that
+ * reports an unkeyed pool. The double is asserted into the seam's shape
+ * deliberately, because a real Cordis `Context` carries the whole plugin
+ * runtime and only these members are read.
  * @param environment - the variables this launch provides.
  */
 function fakeContext(environment: Record<string, string> = {}) {
   const registered = { search: [] as TavilySearchProvider[], fetch: [] as FirecrawlFetchProvider[] }
+  const warnings: string[] = []
   const ctx = {
     web: {
       registerSearchProvider(provider: TavilySearchProvider) {
@@ -52,12 +54,17 @@ function fakeContext(environment: Record<string, string> = {}) {
         return () => {}
       },
     },
+    logger: {
+      warn(message: string) {
+        warnings.push(String(message))
+      },
+    },
     get(serviceName: string) {
       if (serviceName !== 'launchEnvironment') return undefined
       return { get: (variableName: string) => (environment[variableName] === undefined ? undefined : { value: environment[variableName] }) }
     },
   } as unknown as Context
-  return { registered, ctx }
+  return { registered, warnings, ctx }
 }
 
 describe('plugin entry', () => {
@@ -184,5 +191,66 @@ describe('plugin entry', () => {
     expect(resolveCredentialKeys(undefined, undefined, undefined, ' env-single ')).toEqual(['env-single'])
     expect(resolveCredentialKeys(undefined, '   ', '', '')).toEqual([])
     expect(resolveCredentialKeys(undefined, undefined, undefined, undefined)).toEqual([])
+  })
+
+  it('a side enabled without a credential warns at load, and warns about it by name', () => {
+    const { ctx, warnings } = fakeContext()
+    apply(ctx, configure({}))
+    expect(warnings).toHaveLength(2)
+    expect(warnings[0]).toMatch(/tavily search registered without an API key/)
+    expect(warnings[1]).toMatch(/firecrawl fetch registered without an API key/)
+  })
+
+  it('a keyed pool registers without any warning', () => {
+    const { ctx, warnings } = fakeContext({ TAVILY_API_KEY: 'tvly-single', FIRECRAWL_API_KEY: 'fc-single' })
+    apply(ctx, configure({}))
+    expect(warnings).toEqual([])
+  })
+
+  it('unknown configuration keys are rejected instead of silently ignored', () => {
+    const { ctx, registered } = fakeContext()
+    const reject = (raw: unknown) => () => apply(ctx, configure(raw as PluginConfigInput))
+    // Schemastery keeps unknown keys, so without this guard each typo below
+    // would load, do nothing, and leave the deployment on its defaults.
+    expect(reject({ serach: { apiKey: 'x' } })).toThrow(/unknown configuration key\(s\) rejected: serach/)
+    expect(reject({ search: { searchDepthh: 'basic' } })).toThrow(/search\.searchDepthh/)
+    expect(reject({ fetch: { maxBodyChar: 10 } })).toThrow(/fetch\.maxBodyChar/)
+    expect(registered.search.length, 'a rejected row must register nothing').toBe(0)
+    expect(registered.fetch.length, 'a rejected row must register nothing').toBe(0)
+  })
+
+  it('every key the schema declares is accepted by the unknown-key guard', () => {
+    const { ctx, registered } = fakeContext({ TAVILY_API_KEY: 'tvly-single', FIRECRAWL_API_KEY: 'fc-single' })
+    apply(ctx, configure({
+      search: {
+        apiKey: 'cfg-single',
+        apiKeys: ['cfg-a'],
+        baseURL: 'https://api.tavily.com',
+        searchDepth: 'advanced',
+        includeAnswer: false,
+        maxResults: 4,
+        timeoutMs: 12000,
+        maxAttempts: 2,
+        rateLimitCooldownMs: 15000,
+        quotaCooldownMs: 900000,
+        quotaCooldownMaxMs: 7200000,
+      },
+      fetch: {
+        apiKey: 'fc-cfg',
+        apiKeys: ['fc-a'],
+        baseURL: 'https://api.firecrawl.dev',
+        timeoutMs: 8000,
+        maxBodyChars: 4096,
+        onlyMainContent: false,
+        maxAttempts: 2,
+        rateLimitCooldownMs: 15000,
+        quotaCooldownMs: 900000,
+        quotaCooldownMaxMs: 7200000,
+      },
+      searchEnabled: true,
+      fetchEnabled: true,
+    }))
+    expect(registered.search.length).toBe(1)
+    expect(registered.fetch.length).toBe(1)
   })
 })

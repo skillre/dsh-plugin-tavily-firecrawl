@@ -41,7 +41,7 @@ export { TAVILY_PROVIDER_ID, TavilySearchProvider } from './search.js'
 export type { TavilySearchDepth, TavilySearchProviderOptions } from './search.js'
 export { FIRECRAWL_PROVIDER_ID, FirecrawlFetchProvider } from './fetch.js'
 export type { FirecrawlFetchProviderOptions } from './fetch.js'
-export { KEY_FAILURE, KeyPool, classifyHttpStatus, parseKeyList } from './key-pool.js'
+export { KEY_FAILURE, KeyPool, classifyHttpStatus, maskKey, parseKeyList, trimBaseURL } from './key-pool.js'
 export type { AttemptFailureLike, KeyFailureKind, KeyPoolEntry, KeyPoolOptions, KeyRotationOptions } from './key-pool.js'
 
 /** Cordis plugin name used by loader diagnostics. Keep it stable after the first public release. */
@@ -50,64 +50,119 @@ export const name = 'skillre-tavily-firecrawl'
 /** The web seam this plugin registers providers into. */
 export const inject = ['web']
 
-/** Plugin config (all optional — `apply` fills env-var and constant defaults). */
-export const Config = z.object({
+/**
+ * The `search.*` fields {@link Config} declares, as one dict: the schema and
+ * the unknown-key guard below are built from this object, so a field can never
+ * be added to the schema without the guard accepting it (or vice versa).
+ */
+const SEARCH_FIELDS = {
+  /** Literal Tavily API key; prefer the launch-env fallbacks. */
+  apiKey: z.string(),
+  /** Tavily credential pool, rotated per request. Wins over `apiKey`. */
+  apiKeys: z.array(z.string()),
+  /** Endpoint base; `/search` is appended. Defaults to the public API. */
+  baseURL: z.string(),
+  /** Retrieval depth sent as Tavily's `search_depth`. `basic` costs 1 credit, `advanced` 2. */
+  searchDepth: z.union(['basic', 'advanced']),
+  /** Ask Tavily for a synthesized answer (becomes the result `content`). */
+  includeAnswer: z.boolean(),
+  /** Default result count when a request carries no `maxResults`. Omitted = none. */
+  maxResults: z.number().step(1).min(1),
+  /** Per-attempt request timeout in milliseconds. */
+  timeoutMs: z.number().step(1).min(1),
+  /** How many pool keys one call may try. Defaults to the pool size. */
+  maxAttempts: z.number().step(1).min(1),
+  /** Cooldown after Tavily refuses a key with HTTP 429. */
+  rateLimitCooldownMs: z.number().step(1).min(1),
+  /** First cooldown after Tavily refuses a key with a plan/quota status. */
+  quotaCooldownMs: z.number().step(1).min(1),
+  /** Ceiling for the escalating quota cooldown. */
+  quotaCooldownMaxMs: z.number().step(1).min(1),
+}
+
+/** The `fetch.*` fields {@link Config} declares; see {@link SEARCH_FIELDS}. */
+const FETCH_FIELDS = {
+  /** Literal Firecrawl API key; prefer the launch-env fallbacks. */
+  apiKey: z.string(),
+  /** Firecrawl credential pool, rotated per request. Wins over `apiKey`. */
+  apiKeys: z.array(z.string()),
+  /** Endpoint base; `/v1/scrape` is appended. Defaults to the public API. */
+  baseURL: z.string(),
+  /** Provider-side request timeout in milliseconds. */
+  timeoutMs: z.number().step(1).min(1),
+  /** Cap on the markdown body carried in a result (chars). */
+  maxBodyChars: z.number().step(1).min(1),
+  /** Extract only the page's main content. */
+  onlyMainContent: z.boolean(),
+  /** How many pool keys one call may try. Defaults to the pool size. */
+  maxAttempts: z.number().step(1).min(1),
+  /** Cooldown after Firecrawl refuses a key with HTTP 429. */
+  rateLimitCooldownMs: z.number().step(1).min(1),
+  /** First cooldown after Firecrawl refuses a key with a plan/quota status. */
+  quotaCooldownMs: z.number().step(1).min(1),
+  /** Ceiling for the escalating quota cooldown. */
+  quotaCooldownMaxMs: z.number().step(1).min(1),
+}
+
+/** The root fields {@link Config} declares; see {@link SEARCH_FIELDS}. */
+const ROOT_FIELDS = {
   /** Search-side (Tavily) options. */
-  search: z.object({
-    /** Literal Tavily API key; prefer the launch-env fallbacks. */
-    apiKey: z.string(),
-    /** Tavily credential pool, rotated per request. Wins over `apiKey`. */
-    apiKeys: z.array(z.string()),
-    /** Endpoint base; `/search` is appended. Defaults to the public API. */
-    baseURL: z.string(),
-    /** Retrieval depth sent as Tavily's `search_depth`. `basic` costs 1 credit, `advanced` 2. */
-    searchDepth: z.union(['basic', 'advanced']),
-    /** Ask Tavily for a synthesized answer (becomes the result `content`). */
-    includeAnswer: z.boolean(),
-    /** Default result count when a request carries no `maxResults`. Omitted = none. */
-    maxResults: z.number().step(1).min(1),
-    /** Per-attempt request timeout in milliseconds. */
-    timeoutMs: z.number().step(1).min(1),
-    /** How many pool keys one call may try. Defaults to the pool size. */
-    maxAttempts: z.number().step(1).min(1),
-    /** Cooldown after Tavily refuses a key with HTTP 429. */
-    rateLimitCooldownMs: z.number().step(1).min(1),
-    /** First cooldown after Tavily refuses a key with a plan/quota status. */
-    quotaCooldownMs: z.number().step(1).min(1),
-    /** Ceiling for the escalating quota cooldown. */
-    quotaCooldownMaxMs: z.number().step(1).min(1),
-  }),
+  search: z.object(SEARCH_FIELDS),
   /** Fetch-side (Firecrawl) options. */
-  fetch: z.object({
-    /** Literal Firecrawl API key; prefer the launch-env fallbacks. */
-    apiKey: z.string(),
-    /** Firecrawl credential pool, rotated per request. Wins over `apiKey`. */
-    apiKeys: z.array(z.string()),
-    /** Endpoint base; `/v1/scrape` is appended. Defaults to the public API. */
-    baseURL: z.string(),
-    /** Provider-side request timeout in milliseconds. */
-    timeoutMs: z.number().step(1).min(1),
-    /** Cap on the markdown body carried in a result (chars). */
-    maxBodyChars: z.number().step(1).min(1),
-    /** Extract only the page's main content. */
-    onlyMainContent: z.boolean(),
-    /** How many pool keys one call may try. Defaults to the pool size. */
-    maxAttempts: z.number().step(1).min(1),
-    /** Cooldown after Firecrawl refuses a key with HTTP 429. */
-    rateLimitCooldownMs: z.number().step(1).min(1),
-    /** First cooldown after Firecrawl refuses a key with a plan/quota status. */
-    quotaCooldownMs: z.number().step(1).min(1),
-    /** Ceiling for the escalating quota cooldown. */
-    quotaCooldownMaxMs: z.number().step(1).min(1),
-  }),
+  fetch: z.object(FETCH_FIELDS),
   /** Register the Tavily search provider. Defaults to true. */
   searchEnabled: z.boolean(),
   /** Register the Firecrawl fetch provider. Defaults to true. */
   fetchEnabled: z.boolean(),
-})
+}
+
+/** Plugin config (all optional — `apply` fills env-var and constant defaults). */
+export const Config = z.object(ROOT_FIELDS)
+
+/** Root keys {@link Config} accepts: derived from the schema, never restated. */
+const KNOWN_ROOT_KEYS = Object.keys(ROOT_FIELDS)
+
+/** `search.*` keys {@link Config} accepts: derived from the schema. */
+const KNOWN_SEARCH_KEYS = Object.keys(SEARCH_FIELDS)
+
+/** `fetch.*` keys {@link Config} accepts: derived from the schema. */
+const KNOWN_FETCH_KEYS = Object.keys(FETCH_FIELDS)
 
 /** The validated configuration `apply` receives from the loader. */
 export type PluginConfig = ReturnType<typeof Config>
+
+/** Read one configuration object's own keys; absent sections read as no keys. */
+function configKeys(section: unknown): readonly string[] {
+  return typeof section === 'object' && section !== null ? Object.keys(section) : []
+}
+
+/**
+ * Reject configuration keys the schema does not declare.
+ *
+ * Schemastery's object schema accepts and preserves unknown keys instead of
+ * failing, so a mistyped row (`serach:`, `searchDepthh:`) would otherwise be
+ * loaded, silently ignored, and leave the deployment on defaults with no
+ * diagnostic anywhere. Fleet policy requires configuration to fail loudly, so
+ * `apply` refuses such a row before registering anything — the Loader then
+ * reports this message against the row instead of a half-applied plugin.
+ * @param config - the validated configuration `apply` received.
+ * @throws when any key (root, `search.*`, or `fetch.*`) is not declared by {@link Config}.
+ */
+export function assertKnownConfigKeys(config: PluginConfig): void {
+  const unknown: string[] = []
+  const collect = (keys: readonly string[], known: readonly string[], prefix = ''): void => {
+    for (const key of keys) if (!known.includes(key)) unknown.push(`${prefix}${key}`)
+  }
+  collect(configKeys(config), KNOWN_ROOT_KEYS)
+  collect(configKeys(config.search), KNOWN_SEARCH_KEYS, 'search.')
+  collect(configKeys(config.fetch), KNOWN_FETCH_KEYS, 'fetch.')
+  if (unknown.length > 0) {
+    throw new Error(
+      `unknown configuration key(s) rejected: ${unknown.join(', ')}. `
+      + 'Check the spelling against the Configuration section of README.md.',
+    )
+  }
+}
 
 /**
  * Resolve one provider's credential list. Explicit configuration wins over the
@@ -144,6 +199,9 @@ function singleKey(value: unknown): string | undefined {
 
 /** Register the providers with `ctx.web`. Either side can be opted out. */
 export function apply(ctx: Context, config: PluginConfig): void {
+  // Schemastery keeps unknown keys, so a typo would otherwise load silently.
+  assertKnownConfigKeys(config)
+
   // Every launch environment layer may name these keys (inherited env,
   // `<invocation cwd>/.env`, `$DSH_HOME/.env`); the plural form carries a list.
   const environment = launchEnvironmentOf(ctx)
@@ -151,7 +209,7 @@ export function apply(ctx: Context, config: PluginConfig): void {
 
   if (config.searchEnabled !== false) {
     const searchMaxResults = config.search?.maxResults
-    ctx.web.registerSearchProvider(new TavilySearchProvider({
+    const provider = new TavilySearchProvider({
       apiKeys: resolveCredentialKeys(config.search?.apiKeys, config.search?.apiKey, fromEnvironment('TAVILY_API_KEYS'), fromEnvironment('TAVILY_API_KEY')),
       baseURL: config.search?.baseURL ?? TAVILY_DEFAULT_BASE_URL,
       searchDepth: config.search?.searchDepth ?? TAVILY_DEFAULT_SEARCH_DEPTH,
@@ -162,10 +220,17 @@ export function apply(ctx: Context, config: PluginConfig): void {
       quotaCooldownMs: config.search?.quotaCooldownMs,
       quotaCooldownMaxMs: config.search?.quotaCooldownMaxMs,
       ...(searchMaxResults !== undefined ? { maxResults: searchMaxResults } : {}),
-    }))
+    })
+    // The bundle patch pins `web.searchProvider` to this id, so an unkeyed pool
+    // cannot fall through to another provider: say so at load time instead of
+    // leaving only a generic tool-side WEB_PROVIDER_CONFIGURED_UNAVAILABLE.
+    if (provider.pool.size === 0) {
+      ctx.logger.warn('tavily search registered without an API key: web_search stays unavailable until `search.apiKeys` or TAVILY_API_KEY(S) is set')
+    }
+    ctx.web.registerSearchProvider(provider)
   }
   if (config.fetchEnabled !== false) {
-    ctx.web.registerFetchProvider(new FirecrawlFetchProvider({
+    const provider = new FirecrawlFetchProvider({
       apiKeys: resolveCredentialKeys(config.fetch?.apiKeys, config.fetch?.apiKey, fromEnvironment('FIRECRAWL_API_KEYS'), fromEnvironment('FIRECRAWL_API_KEY')),
       baseURL: config.fetch?.baseURL ?? FIRECRAWL_DEFAULT_BASE_URL,
       timeoutMs: config.fetch?.timeoutMs ?? FIRECRAWL_DEFAULT_TIMEOUT_MS,
@@ -175,6 +240,10 @@ export function apply(ctx: Context, config: PluginConfig): void {
       rateLimitCooldownMs: config.fetch?.rateLimitCooldownMs,
       quotaCooldownMs: config.fetch?.quotaCooldownMs,
       quotaCooldownMaxMs: config.fetch?.quotaCooldownMaxMs,
-    }))
+    })
+    if (provider.pool.size === 0) {
+      ctx.logger.warn('firecrawl fetch registered without an API key: web_fetch stays unavailable until `fetch.apiKeys` or FIRECRAWL_API_KEY(S) is set')
+    }
+    ctx.web.registerFetchProvider(provider)
   }
 }

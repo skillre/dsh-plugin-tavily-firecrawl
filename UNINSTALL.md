@@ -1,25 +1,13 @@
 # Uninstall and rollback
 
-Remove the bundle from a profile:
+In your DSH Desktop Client or Web UI **Plugins** manager, select `@skillre/dsh-plugin-tavily-firecrawl` and confirm removal. To roll back, the user first checks any provider-dependent configuration, then removes the faulty version and selects a compatible known-good version from a verified source in the same manager, if supported; restart when requested and check both web providers. Developers/agents do not remove preexisting bundles or install replacements for the user.
 
-```sh
-dsh plugin --profile <profile> remove @skillre/dsh-plugin-tavily-firecrawl
-```
+A temporary developer tarball install uses an owned disposable **non-Desktop** profile. Stop the test process, remove only test-created bundle/dependency/selection/configuration state or the confirmed owned profile, and verify cleanup even after failure. Testing in a real Desktop/Web user profile requires prior consent, a baseline inventory, a reversible plan and restoration of only test-created state; preserve preexisting plugins and data. If the manager cannot start, arrange separately authorized CLI/profile recovery; Electron's `desktop` profile is not a CLI `--profile desktop` test target.
 
-Roll back to a known-good version:
+Removing the bundle removes its provider registrations but does not automatically erase user-owned API keys/credential-store entries or unrelated profile overrides.
 
-```sh
-dsh plugin --profile <profile> remove @skillre/dsh-plugin-tavily-firecrawl
-dsh plugin --profile <profile> add @skillre/dsh-plugin-tavily-firecrawl@<known-good-version>
-```
+**Remove the whole bundle, not one row.** The Plugins manager offers a whole-bundle toggle for this package (bundle-provided rows are reported `unaddressable` and cannot be toggled on their own); removing the bundle takes its entire patch layer with it, so the `web.searchProvider` / `web.fetchProvider` pins and the `web-search-deepseek` disable all revert to `@deepseek-ai/dsh-base` defaults (`deepseek-official` / `http`) with no further action. Do **not** hand-write `- id: skillre-tavily-firecrawl / disabled: true` into your profile's `cordis.patch.yml`: that stops only this row while the pins and the shipped-search disable remain, which leaves `web_search` / `web_fetch` failing with `WEB_PROVIDER_CONFIGURED_MISSING`.
 
-Then inspect and start the profile:
+**Only a pin you wrote yourself needs attention.** If your own profile/home layer overrides `web.searchProvider` or `web.fetchProvider` (the user layers outrank any bundle layer), set them back to a working provider under your own control before/with removal, or the seam will keep resolving the id you pinned. Back up and preserve any shared keys and configuration; rollback may require restoring the prior provider selection and restarting DSH.
 
-```sh
-dsh --profile <profile> --dump-config
-dsh --profile <profile>
-```
-
-If the plugin prevents the Web GUI from starting, perform recovery from the CLI; do not depend on the GUI being available.
-
-Removing the package removes its Bundle layer. Document separately any user-owned files or external resources that an implemented plugin deliberately leaves behind.
+After removal the built-in **Web search / DeepSeek search provider** settings card reappears in Settings → Plugins, because its `web-search-deepseek` row mounts again.

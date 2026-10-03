@@ -37,10 +37,30 @@ Fleet adaptations:
 - The bundle patch keeps the source's wiring — pinning `web.searchProvider`/`fetchProvider` and
   disabling the shipped `web-search-deepseek` — under the fleet row id.
 
+Audit fixes folded into this unreleased baseline (2026-10-03):
+
+- **Unknown configuration keys are rejected.** Schemastery keeps keys it does not declare, so a
+  typo such as `serach:` or `searchDepthh:` used to load, do nothing and leave the deployment on
+  its defaults with no diagnostic; `apply` now refuses the row before registering anything.
+- **An enabled side without a credential logs a warning at load** instead of surfacing only a
+  generic tool-side `WEB_PROVIDER_CONFIGURED_UNAVAILABLE` on the first call.
+- **Short credentials are never half-revealed by their own mask**: the masked tail is shown only
+  for keys longer than 20 characters, because a fixed `6…4` mask on an 11-character key exposed
+  10 of its 11 characters.
+- **Endpoint bases lose trailing slashes**, so `https://api.tavily.com/` posts to `/search`
+  instead of `//search`; an unusable base is still rejected by `available()` rather than repaired.
+- Documentation now states the install/uninstall ownership rules of the fleet policy, the
+  `WEB_PROVIDER_UNAVAILABLE` end state of `searchEnabled: false`, the inertness of
+  `DSH_WEB_SEARCH_PROVIDER`/`DSH_WEB_FETCH_PROVIDER` while the bundle pins those ids, and the
+  difference between the Plugins manager's bundle toggle (removes the whole patch layer) and a
+  hand-written per-row `disabled` in the user layer (breaks selection).
+
 Removed legacy install paths (not restored):
 
 - `install.sh` / `uninstall.sh` (symlink- and copy-based profile installs, forbidden by fleet
-  policy; use `dsh plugin --profile <profile> add|remove` with a packed tarball instead);
+  policy; end users install, update and remove this package in the DSH Desktop Client or Web UI
+  **Plugins** manager, and a developer packs a tarball only into an owned, disposable
+  non-Desktop profile for verification);
 - `tavily-firecrawl.patch.yml` and `enable-web-fetch-default.patch.yml` (duplicate/overlay patch
   forms; the shipped bundle patch is the only wiring);
 - `presets/standard-web` (a fork of a shipped preset; DSH ≥ 0.1.5 presets already set

@@ -146,18 +146,40 @@ export function parseKeyList(value: unknown): string[] {
     .filter((part) => part.length > 0)
 }
 
+/** Shortest credential whose masked tail still hides at least as much as it shows. */
+export const MASK_MIN_KEY_LENGTH = 20
+
 /**
  * Build the display label for one credential: its 1-based position plus a
  * masked tail. Error messages and diagnostics name keys this way, so a
  * multi-account setup can be told apart without printing a usable secret.
+ *
+ * The tail is shown only when at least as many characters stay hidden as are
+ * printed: a short secret would otherwise be nearly reconstructed by the mask
+ * itself (an 11-character key with a fixed 6+4 mask reveals 10 of its 11
+ * characters), so anything at or below {@link MASK_MIN_KEY_LENGTH} is named by
+ * position alone.
  * @param key - the credential.
  * @param index - its zero-based position in the pool.
  * @returns e.g. `#2 (tvly-d…cdef)`, or plain `#2` for short values.
  */
 export function maskKey(key: string, index: number): string {
   const label = `#${index + 1}`
-  if (key.length <= 10) return label
+  if (key.length <= MASK_MIN_KEY_LENGTH) return label
   return `${label} (${key.slice(0, 6)}…${key.slice(-4)})`
+}
+
+/**
+ * Normalize one provider endpoint base: a configured trailing slash would
+ * otherwise concatenate into `//search` / `//v1/scrape` and turn a working
+ * endpoint into a 404. Only trailing slashes are removed, so the value is
+ * still the operator's own (including an unusable one, which `available()`
+ * keeps rejecting).
+ * @param baseURL - the configured endpoint base.
+ * @returns the base without trailing slashes.
+ */
+export function trimBaseURL(baseURL: string): string {
+  return baseURL.replace(/\/+$/, '')
 }
 
 /**

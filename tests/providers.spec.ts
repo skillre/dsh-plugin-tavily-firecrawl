@@ -337,3 +337,28 @@ describe('firecrawl provider', () => {
     expect(calls[1]?.userAgent).toBe(`skillre-tavily-firecrawl/${manifest.version} (firecrawl)`)
   })
 })
+
+describe('configured endpoint bases', () => {
+  it('a trailing slash on the Tavily base still posts to /search', async () => {
+    const provider = tavily({ baseURL: `${baseURL}/`, apiKey: KEY.ok })
+    expect(provider.options.baseURL).toBe(baseURL)
+    calls.length = 0
+    const result = await provider.search({ query: 'hello' })
+    expect(calls[0]?.path).toBe('/search')
+    expect(result.content).toBe('42')
+  })
+
+  it('a trailing slash on the Firecrawl base still posts to /v1/scrape', async () => {
+    const provider = firecrawl({ baseURL: `${baseURL}///`, apiKey: KEY.fcOk })
+    expect(provider.options.baseURL).toBe(baseURL)
+    calls.length = 0
+    const result = await provider.fetch({ url: 'https://example.com/' })
+    expect(calls[0]?.path).toBe('/v1/scrape')
+    expect(result.body.content).toBe('# Hello')
+  })
+
+  it('an unusable base stays unusable instead of being repaired', () => {
+    expect(tavily({ baseURL: 'not a url' }).available()).toBe(false)
+    expect(firecrawl({ baseURL: 'not a url', apiKey: KEY.fcOk }).available()).toBe(false)
+  })
+})
