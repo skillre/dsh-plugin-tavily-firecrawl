@@ -4,7 +4,7 @@
 
 Tavily search and Firecrawl fetch providers for the DeepSeek Harness web seam, with a rotating multi-key credential pool
 
-Replaces the DeepSeek Harness web capabilities with **Tavily search + Firecrawl fetch**, with **multi-key rotation**: a Host-only bundle that provides two `ctx.web` providers; the user initiates final installation in the DSH Plugins manager.
+Replaces the DeepSeek Harness web capabilities with **Tavily search + Firecrawl fetch**, with **multi-key rotation**: a bundle with two `ctx.web` providers on the Host side plus one configuration page in the browser, so keys are entered under Settings → Plugins; the user initiates final installation in the DSH Plugins manager.
 
 [中文](README.md)
 
@@ -15,12 +15,14 @@ The package registers two providers with `ctx.web` (`@deepseek-ai/dsh-web`):
 - search: Tavily (`POST https://api.tavily.com/search`) → the `web_search` tool
 - fetch: Firecrawl (`POST https://api.firecrawl.dev/v1/scrape`, markdown) → the `web_fetch` tool
 
+The browser half is exactly one surface: the **configuration page on Settings → Plugins → this bundle's page** (`package.json#dsh.client`, `platform: web`, registering only the `plugins.bundle.config` slot), where API keys are entered and cleared.
+
 Non-goals:
 
-- no UI, Slot, Client code or settings panel; there is no `dsh.client` section in `package.json`;
+- no chat decorations, session-level UI or layout Slot occupancy; there is no browser code beyond that configuration page;
 - it does not register tools: `web_search` / `web_fetch` are gated by `tool-web` (`fetch: true`) in the agent preset, and this package only supplies providers;
 - it does not fork, copy or override any shipped preset, and never writes to `$DSH_HOME/.agent-presets/`;
-- it does not modify DSH itself and performs no filesystem writes (see "Security").
+- it does not modify DSH itself and writes no filesystem directly (the credentials store is written by DSH's credentials service — see "Security").
 
 ## Install
 
@@ -39,7 +41,9 @@ dsh --profile <dev-profile> --dump-config
 
 Record the baseline and `finally`-style cleanup before installing. Stop test processes, remove only test-created bundle/dependency/selection/configuration state or the confirmed owned isolated profile, and verify absence even on failure. A test in the user's actual Desktop/Web profile requires prior consent and restoration of only test-created state, preserving existing installations and data; testing is not delivery. Do not use `dsh plugin ... add .`: pnpm can create a source link, resolving the plugin's **own** `node_modules` and hiding host API drift. The tarball path is for development testing; a `file:` dependency in a manifest is not a local install address entered by a user.
 
-After installing, the user configures their own keys for the target runtime and restarts its DSH process (credentials are read once at startup). The following `dsh web` command is **only a standalone Web UI startup example**, not a Desktop Client installation command. Electron starts Desktop: verify its actual environment/credential configuration surface rather than assuming CLI environment or `.env` locations apply there:
+**Entering keys after install (the recommended way)**: open **Settings → Plugins** in DSH and select this bundle's page. The configuration page has one input per provider — paste one or several keys (comma, semicolon or newline separated) and press **Save**. Keys are written to DSH's **credentials store** (never into the profile configuration, never in `dsh --dump-config`), and **the next search or fetch uses them with no restart**; "Remove the stored key" clears only the stored value, so an environment variable with the same name still answers.
+
+Environment variables remain supported (read once when the process starts, so changing them still requires a restart). The following `dsh web` command is **only a standalone Web UI startup example**, not a Desktop Client installation command. Electron starts Desktop: verify its actual environment/credential configuration surface rather than assuming CLI environment or `.env` locations apply there:
 
 ```sh
 # any of three layers: process environment, <invocation cwd>/.env, $DSH_HOME/.env
@@ -156,18 +160,22 @@ The schema **fails loudly**: wrong types, a `searchDepth` other than `basic`/`ad
 
 **Credential resolution order** (each side independently):
 
-1. `search.apiKeys` / `fetch.apiKeys` (config, preferred, may be a list)
-2. `search.apiKey` / `fetch.apiKey` (config, single)
-3. `TAVILY_API_KEYS` / `FIRECRAWL_API_KEYS` (environment; comma, semicolon and whitespace including newlines all separate keys)
-4. `TAVILY_API_KEY` / `FIRECRAWL_API_KEY` (environment, single)
+1. `search.apiKeys` / `fetch.apiKeys` (the plugin row's `config`; the most explicit form, may be a list)
+2. `search.apiKey` / `fetch.apiKey` (the plugin row's `config`, single key)
+3. the credential reference **`TAVILY_API_KEYS` / `FIRECRAWL_API_KEYS`** — **what the configuration page writes**; inside that reference the layers are: inherited environment → credentials store → `<invocation cwd>/.env` → `$DSH_HOME/.env`
+4. the single-key reference `TAVILY_API_KEY` / `FIRECRAWL_API_KEY` (the same layering)
 
-The environment has three layers, most trusted first: the inherited process environment → `<invocation cwd>/.env` → `$DSH_HOME/.env`.
+A list value separates keys with commas, semicolons or whitespace including newlines; the configuration page normalizes what you paste into one comma-separated line.
 
-> ⚠️ Credentials are read once when the plugin loads (process start). **Restart dsh after changing keys or config.**
+> ✅ **No restart after saving on the configuration page**: the reference is re-resolved at the start of every request, and the `credentials/reference-updated` event refreshes the rotation pool the moment a write commits.
+> ⚠️ Two changes still need a restart: **environment variables** (the launch snapshot is taken when the process starts), and **other fields** in the plugin row's `config` (such as `searchDepth`, `maxBodyChars`) — they are not part of that live read; the Loader's ordinary config update handles them, and restarting DSH settles anything that does not take effect immediately.
 
 ## Multi-key rotation
 
-Free plans are small: register several accounts and list the keys, and the plugin rotates automatically.
+Free plans are small: register several accounts and list the keys, and the plugin rotates automatically. Two equivalent ways to list them:
+
+- **configuration page (recommended)**: Settings → Plugins → this bundle's page, paste `tvly-aaaa, tvly-bbbb, tvly-cccc` and save;
+- **environment variables**:
 
 ```bash
 TAVILY_API_KEYS=tvly-aaaa,tvly-bbbb,tvly-cccc
@@ -183,6 +191,7 @@ FIRECRAWL_API_KEYS=fc-aaaa;fc-bbbb
 | HTTP 5xx | retry on the next key without blaming the current one |
 | HTTP 400 and other request-level errors | key-neutral: fail immediately, do not burn the remaining keys |
 | Every key unusable | the error names each key's state and the estimated recovery time instead of failing silently |
+| keys added or removed while running | every request re-resolves the credential reference and merges the list into the pool: keys that stay **keep their cooldown state**, new keys join clean, removed keys leave with theirs (no restart) |
 
 Cooldowns live in memory and are **cleared by a restart**.
 
@@ -215,10 +224,11 @@ A peer range is not compatibility evidence. After recording evidence, rebuild an
 
 - **Network egress**: outbound HTTPS only, to `api.tavily.com` (`POST /search`) and `api.firecrawl.dev` (`POST /v1/scrape`). Requests use `redirect: 'error'`, so redirects fail instead of being followed. No other network access.
 - **Secrets**: `TAVILY_API_KEY(S)`, `FIRECRAWL_API_KEY(S)`, or `apiKeys` / `apiKey` in config. Keys appear only in the `Authorization: Bearer …` header and Tavily's `api_key` body field; error messages, logs and tool output carry **masked labels** (e.g. `#2 (tvly-d…1111)`) and never a usable secret. The masked tail is shown only for keys longer than 20 characters; shorter ones are named by position alone (`#2`), so a fixed-length mask cannot print most of a short secret.
-- **Filesystem**: nothing is written. The only read is the packaged `package.json`, read once at load to build the User-Agent (`skillre-tavily-firecrawl/<version> (tavily|firecrawl)`). Credential files are not read directly — the launch environment snapshot is supplied by the launcher.
-- **Logging**: when a side is enabled without any credential, `ctx.logger.warn` emits one message naming the configuration keys but no secret (e.g. `tavily search registered without an API key: …`), so a missing configuration surfaces before the first tool call. There is no other runtime logging.
-- **Config-layer risk**: `apiKey`/`apiKeys` written into the plugin's `config:` appear in `dsh --dump-config` output, so **environment variables are preferred**.
-- **Lifecycle**: credentials and cooldowns are fixed at load time, and every provider registration is bound to the current Fiber through `ctx.web`, so it is removed on stop/update (a later `apply` cannot hit a duplicate-id error, because the seam unregisters providers when the Fiber is disposed).
+- **Where a key saved from the configuration page lives**: written through DSH's credentials service (`remote.credentials.set`) into the credentials store — this package never persists it itself. It stays out of the profile configuration and out of `dsh --dump-config`, and it never rides a settings response: both fields are marked `role('secret')` in the schema, so a configuration surface reports only `set: true`. Neither the credentials service nor its Remote namespace returns the literal; the page shows only "stored / not stored".
+- **Filesystem**: this package's code writes nothing. The only read is the packaged `package.json`, read once at load to build the User-Agent (`skillre-tavily-firecrawl/<version> (tavily|firecrawl)`). Persisting the credentials store is the credentials service's job; credential files are not read directly — the launch environment snapshot is supplied by the launcher.
+- **Logging**: after the first credential read settles, a side with no key at all emits one `ctx.logger.warn` naming the configuration keys but no secret (e.g. `tavily search registered without an API key: …`), so a missing configuration surfaces before the first tool call. There is no other runtime logging.
+- **Config-layer risk**: `apiKey`/`apiKeys` written into the plugin row's `config:` appear in `dsh --dump-config` output, so **the configuration page or environment variables are preferred**.
+- **Lifecycle**: every provider and page registration is bound to the current Fiber through `ctx.effect`, so it is removed on stop/update (a later `apply` cannot hit a duplicate-id error, because the seam unregisters providers when the Fiber is disposed); the credential reference is re-resolved before each request, and cooldown state is kept per key in memory.
 
 ## Uninstall and rollback
 
@@ -227,7 +237,10 @@ See [UNINSTALL.md](UNINSTALL.md).
 ## Known limitations
 
 - Cooldowns are in memory and reset on restart (so a quota refusal can be retried earlier than intended).
-- With an empty key pool `available()` is `false` and the seam reports only its generic `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`; the rich per-key state and recovery estimate need **at least one key**. A `ctx.logger.warn` is emitted at load naming the unkeyed side.
+- With an empty key pool the seam reports only its generic `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`; the rich per-key state and recovery estimate need **at least one key**. A `ctx.logger.warn` is emitted once the first credential read settles with no key.
+- **The configuration page needs DSH's credentials service and the `plugins.bundle.config` slot**: both exist on `0.1.7-rc.2` and `0.2.0-rc.2`; on a composition without them the page is not registered (the browser half does not load either) and keys come from the environment or the plugin row's `config` as before.
+- **The page saves and clears, it never displays a stored key**: neither the credentials service nor its Remote namespace returns the literal, so the page shows only "stored / not stored / supplied by the environment".
+- **Clearing may still leave a key**: clearing removes only the stored value, so a value for the same reference in the environment or a `.env` file keeps answering on the next request.
 - The Firecrawl side uses only the seam request's `url` and ignores any other option a future seam revision might add (`web_fetch` currently sends `url` only).
 - Search snippets are always capped at 600 characters.
 - With `searchEnabled: false` you must do **both** of these in your own profile override: unpin `web.searchProvider`, and re-enable `web-search-deepseek` (`disabled: false`) or pin another installed search provider. Unpinning alone is not enough: this bundle has already disabled the shipped search provider, so after unpinning there is no usable search provider at all and the seam fails with `WEB_PROVIDER_UNAVAILABLE` rather than `WEB_PROVIDER_CONFIGURED_MISSING`.

@@ -55,6 +55,25 @@ Audit fixes folded into this unreleased baseline (2026-10-03):
   difference between the Plugins manager's bundle toggle (removes the whole patch layer) and a
   hand-written per-row `disabled` in the user layer (breaks selection).
 
+Keys can be entered where the plugin is configured (2026-10-05):
+
+- **A configuration page ships with the bundle**: `dsh.client` (`platform: web`) registers one
+  entry in `plugins.bundle.config`, so Settings → Plugins → this bundle's page shows a Tavily and
+  a Firecrawl input. Both hold a comma/semicolon/newline-separated list, so multi-key rotation is
+  preserved exactly as `TAVILY_API_KEYS` spells it.
+- **Keys go to the credentials store, not the configuration**: the page writes
+  `TAVILY_API_KEYS` / `FIRECRAWL_API_KEYS` through `remote.credentials.set`, so a saved key never
+  enters the profile patch, never appears in `dsh --dump-config`, and never rides a settings
+  response (both config fields are now `role('secret')`).
+- **Saving needs no restart**: the credential source re-resolves the reference before every
+  request and on `credentials/reference-updated`, and `KeyPool.reconcile` merges the new list into
+  the rotation pool while every surviving key keeps its cooldown state. Environment variables and
+  `.env` layers keep working unchanged because the reference resolves the same names.
+- The entry fields in `Config` are marked `.volatile()`, which is what puts this entry on the
+  configuration surface at all (the settings service only describes schemas with live fields);
+  values are read through a helper that accepts both a live reference and a plain value, so one
+  build still runs on every DSH line in `engines.dsh`.
+
 Removed legacy install paths (not restored):
 
 - `install.sh` / `uninstall.sh` (symlink- and copy-based profile installs, forbidden by fleet

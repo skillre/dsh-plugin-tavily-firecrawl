@@ -4,7 +4,7 @@
 
 Tavily search and Firecrawl fetch providers for the DeepSeek Harness web seam, with a rotating multi-key credential pool
 
-把 DeepSeek Harness 的联网能力换成 **Tavily 搜索 + Firecrawl 抓取** 的组合，并支持**多 API Key 轮询**：一个纯 Host bundle，提供 `ctx.web` 的两个 provider；最终安装由用户在 DSH 插件管理界面发起。
+把 DeepSeek Harness 的联网能力换成 **Tavily 搜索 + Firecrawl 抓取** 的组合，并支持**多 API Key 轮询**：一个 bundle（Host 侧两个 `ctx.web` provider + 一张浏览器配置页），Key 可以直接在 设置 → 插件 里填写；最终安装由用户在 DSH 插件管理界面发起。
 
 [English](README.en.md)
 
@@ -15,12 +15,14 @@ Tavily search and Firecrawl fetch providers for the DeepSeek Harness web seam, w
 - 搜索：Tavily（`POST https://api.tavily.com/search`）→ `web_search` 工具
 - 抓取：Firecrawl（`POST https://api.firecrawl.dev/v1/scrape`，返回 markdown）→ `web_fetch` 工具
 
+浏览器侧只有一个面：**设置 → 插件 → 本 bundle 页面**上的配置页（`package.json#dsh.client`，`platform: web`，只注册 `plugins.bundle.config` 一个槽），用来填写/清除 API Key。
+
 非目标：
 
-- 不提供 UI、Slot、Client 端代码或设置面板；`package.json` 中没有 `dsh.client` 段。
+- 不提供聊天内装饰、会话级 UI 或布局 Slot 占位；除上面那张配置页外没有任何浏览器代码。
 - 不注册工具本身：`web_search` / `web_fetch` 这两个**工具**由 agent 预设里的 `tool-web`（`fetch: true`）决定，本包只提供 provider。
 - 不 fork、不复制、不覆盖任何官方预设，也不写入 `$DSH_HOME/.agent-presets/`。
-- 不修改 DSH 本体，不写文件系统（见「安全与权限」）。
+- 不修改 DSH 本体，不直接写文件系统（凭据存储由 DSH 的凭据服务写入，见「安全与权限」）。
 
 ## 安装
 
@@ -39,7 +41,9 @@ dsh --profile <dev-profile> --dump-config
 
 安装前登记基线与 `finally` 式清理；测试结束（包括失败）停止进程，仅卸载本次安装的 bundle/依赖/选择/配置或清理确认归属的隔离 profile，并核验无残留。用户真实 Desktop/Web profile 的测试须事先同意并仅撤销测试新增状态，不触碰已有安装和数据；测试不是交付。不要用 `dsh plugin ... add .`：源码目录交给 pnpm 会建立源码链接，让插件解析到**自己的** `node_modules`，掩盖宿主 API 漂移。打包 tarball 仅是开发验证路径；清单中的 `file:` 依赖不是用户在界面输入的本地包地址。
 
-用户安装后按其目标运行方式配置自己的 Key 并重启对应 DSH 进程（凭据在进程启动时读取一次）。下列 `dsh web` 仅是**独立 Web UI 的启动示例**，不是 Desktop Client 插件安装命令；Desktop 由 Electron 启动，须先核实其实际环境变量/凭据入口，不要把 CLI 命令或 `.env` 位置直接当成 Desktop 的配置指引：
+**装好之后填 Key（推荐方式）**：在 DSH 的 **设置 → 插件** 里打开本 bundle 的页面，配置页上有 Tavily / Firecrawl 两个输入框——直接粘贴一个或多个 Key（逗号、分号或换行分隔），点「保存」即可。Key 写进 DSH 的**凭据存储**（不进 profile 配置、不出现在 `dsh --dump-config`），**下一次搜索/抓取立即生效，无需重启**；「清除已保存的密钥」只删存储值，环境变量里若有仍会继续生效。
+
+也可以用环境变量（进程启动时读取一次，改完需重启对应 DSH 进程）。下列 `dsh web` 仅是**独立 Web UI 的启动示例**，不是 Desktop Client 插件安装命令；Desktop 由 Electron 启动，须先核实其实际环境变量/凭据入口，不要把 CLI 命令或 `.env` 位置直接当成 Desktop 的配置指引：
 
 ```sh
 # 任选一层：进程环境、<调用目录>/.env、$DSH_HOME/.env
@@ -155,18 +159,22 @@ Schema 会**大声失败**：类型不符、`searchDepth` 非 `basic`/`advanced`
 
 **凭据解析顺序**（每侧独立）：
 
-1. `search.apiKeys` / `fetch.apiKeys`（配置，推荐，可多个）
-2. `search.apiKey` / `fetch.apiKey`（配置，单 Key）
-3. `TAVILY_API_KEYS` / `FIRECRAWL_API_KEYS`（环境，多 Key：逗号、分号、空白含换行都可分隔）
-4. `TAVILY_API_KEY` / `FIRECRAWL_API_KEY`（环境，单 Key）
+1. `search.apiKeys` / `fetch.apiKeys`（插件行 `config`，显式最高，可多个）
+2. `search.apiKey` / `fetch.apiKey`（插件行 `config`，单 Key）
+3. 凭据引用 **`TAVILY_API_KEYS` / `FIRECRAWL_API_KEYS`** —— **配置页保存的就是它**；同一引用内部再分层：继承环境 → 凭据存储 → `<调用目录>/.env` → `$DSH_HOME/.env`
+4. 单 Key 引用 `TAVILY_API_KEY` / `FIRECRAWL_API_KEY`（同样的分层）
 
-环境变量有三个层级，前者优先：进程启动环境 → `<调用目录>/.env` → `$DSH_HOME/.env`。
+多 Key 的值用逗号、分号或空白（含换行）分隔；配置页保存时会规范成一行逗号分隔的列表。
 
-> ⚠️ 凭据在插件加载（进程启动）时读取一次，**改 Key / 改配置后必须重启 dsh**。
+> ✅ **配置页保存后无需重启**：请求开始前会重新解析引用，并监听 `credentials/reference-updated`，所以保存完成即进入轮池。
+> ⚠️ 仍需重启的两类改动：改**环境变量**（进程启动时的 launch 快照）；改插件行 `config` 里的**其它**字段（如 `searchDepth`、`maxBodyChars`）——它们不参与上面的实时读取，由 Loader 的常规配置更新流程处理，若未即时生效就重启 DSH。
 
 ## 多 Key 轮询
 
-免费版额度很小，注册多个账号后把 Key 列出来即可，插件会自动轮询：
+免费版额度很小，注册多个账号后把 Key 列出来即可，插件会自动轮询。两种等价写法：
+
+- **配置页（推荐）**：设置 → 插件 → 本 bundle 页面，在输入框里粘贴 `tvly-aaaa, tvly-bbbb, tvly-cccc` 后保存；
+- **环境变量**：
 
 ```bash
 TAVILY_API_KEYS=tvly-aaaa,tvly-bbbb,tvly-cccc
@@ -182,6 +190,7 @@ FIRECRAWL_API_KEYS=fc-aaaa;fc-bbbb
 | HTTP 5xx | 换下一个 Key 重试，但不记该 Key 的问题 |
 | HTTP 400 等请求级错误 | 与 Key 无关，直接报错，不再消耗其余 Key |
 | 所有 Key 都不可用 | 明确报出每个 Key 的状态与预计恢复时间，而不是静默失败 |
+| 运行中增删 Key | 每次请求前重新解析凭据引用并合并进轮池：**留下的 Key 保留冷却状态**，新 Key 干净加入，被删的 Key 随状态一起消失（无需重启） |
 
 冷却状态保存在内存里，**重启进程即清空**。
 
@@ -213,11 +222,12 @@ Peer range 不是兼容性证据。写入证据后必须重新生成并挂载将
 ## 安全与权限
 
 - **网络出口**：仅出站 HTTPS 到 `api.tavily.com`（`POST /search`）与 `api.firecrawl.dev`（`POST /v1/scrape`）。请求使用 `redirect: 'error'`，重定向直接失败。没有其他网络访问。
-- **凭据/机密**：`TAVILY_API_KEY(S)`、`FIRECRAWL_API_KEY(S)`，或配置里的 `apiKeys` / `apiKey`。密钥只放在 `Authorization: Bearer …` 与 Tavily 请求体的 `api_key` 字段里；错误消息、日志和工具输出只出现**脱敏标签**（如 `#2 (tvly-d…1111)`），不会打印可用密钥。脱敏标签只对长度 > 20 位的 Key 显示首 6 + 末 4 位，更短的 Key 只显示序号（`#2`），避免固定长度的掩码反而把短密钥几乎完整地印出来。
-- **文件系统**：不写任何文件；只在启动时读一次随包发布的 `package.json` 作为 User-Agent 版本号（`skillre-tavily-firecrawl/<version> (tavily|firecrawl)`）。不读取凭据文件——launch environment 快照由 launcher 提供。
-- **日志**：加载时如果某侧已启用却没有任何凭据，会经 `ctx.logger.warn` 打一条不含量、只含配置键名的提示（例如 `tavily search registered without an API key: …`），用于在第一次工具调用失败之前暴露缺配置；除此之外无任何运行期日志输出。
-- **配置层风险**：写在插件 `config:` 里的 `apiKey`/`apiKeys` 会出现在 `dsh --dump-config` 输出中，**优先用环境变量**。
-- **生命周期**：凭据与冷却状态都在插件加载时确定；所有 provider 注册都经 `ctx.web` 绑定当前 Fiber，stop/update 后移除（重新 `apply` 不会因重复 id 而失败，因为 seam 在 Fiber 销毁时注销 provider）。
+- **凭据/机密**：`TAVILY_API_KEY(S)`、`FIRECRAWL_API_KEY(S)`，或插件行 `config` 里的 `apiKeys` / `apiKey`。密钥只放在 `Authorization: Bearer …` 与 Tavily 请求体的 `api_key` 字段里；错误消息、日志和工具输出只出现**脱敏标签**（如 `#2 (tvly-d…1111)`），不会打印可用密钥。脱敏标签只对长度 > 20 位的 Key 显示首 6 + 末 4 位，更短的 Key 只显示序号（`#2`），避免固定长度的掩码反而把短密钥几乎完整地印出来。
+- **配置页保存的 Key 存在哪里**：由 DSH 的**凭据服务**写入凭据存储（`remote.credentials.set`），本包自己不落盘——不进 profile 配置、不出现在 `dsh --dump-config`、也不会随 settings 响应回传；schema 里这两个字段标了 `role('secret')`，配置面即使列出它们也只回传 `set: true`。凭据服务与 Remote 都不回传明文，配置页只显示「已保存 / 未保存」。
+- **文件系统**：本包代码不写任何文件；只在启动时读一次随包发布的 `package.json` 作为 User-Agent 版本号（`skillre-tavily-firecrawl/<version> (tavily|firecrawl)`）。凭据存储的落盘由 DSH 凭据服务完成，不读取凭据文件——launch environment 快照由 launcher 提供。
+- **日志**：首次凭据解析完成后，若某侧一个 Key 都没有，会经 `ctx.logger.warn` 打一条不含密钥、只含配置键名的提示（例如 `tavily search registered without an API key: …`），用于在第一次工具调用失败之前暴露缺配置；除此之外无任何运行期日志输出。
+- **配置层风险**：写在插件行 `config:` 里的 `apiKey`/`apiKeys` 会出现在 `dsh --dump-config` 输出中，**优先用配置页或环境变量**。
+- **生命周期**：provider 注册与配置页注册都经 `ctx.effect` 绑定当前 Fiber，stop/update 后移除（重新 `apply` 不会因重复 id 而失败，因为 seam 在 Fiber 销毁时注销 provider）；凭据引用在每次请求前解析，冷却状态在内存中按 Key 保留。
 
 ## 卸载与回滚
 
@@ -226,7 +236,10 @@ Peer range 不是兼容性证据。写入证据后必须重新生成并挂载将
 ## 已知限制
 
 - 冷却状态在内存中，重启 dsh 即清空（配额类错误也因此可能被提前重试）。
-- Key 池为空时，`available()` 为 `false`，seam 只会给出通用的 `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`；带每个 Key 状态与恢复时间的详细消息需要**至少一个 Key**。加载时会先打一条 `ctx.logger.warn` 提示该侧没有凭据。
+- Key 池为空时，seam 只会给出通用的 `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`；带每个 Key 状态与恢复时间的详细消息需要**至少一个 Key**。首次凭据解析完成后若仍无 Key，会打一条 `ctx.logger.warn` 提示该侧没有凭据。
+- **配置页依赖 DSH 的凭据服务与 `plugins.bundle.config` 槽**：两者在 `0.1.7-rc.2` / `0.2.0-rc.2` 都存在；如果某个组合缺失，配置页不会注册（浏览器半也不加载），此时仍可用环境变量或插件行 `config` 供 Key。
+- **配置页只能保存/清除，不显示已存 Key 的内容**：凭据服务与 Remote 都不回传明文，页面只显示「已保存 / 未保存 / 由环境提供」。
+- **清除了仍可能有 Key**：清除只删凭据存储里的值；若同一引用在环境或 `.env` 里还有值，下一次请求仍会解析到它。
 - Firecrawl 侧只使用 seam 请求的 `url`，忽略其未来可能新增的其它选项（`web_fetch` 工具当前也只发送 `url`）。
 - 搜索 snippet 一律截断到 600 字符。
 - `searchEnabled: false` 时要在用户自己的 profile 覆盖层里**同时做两件事**：解开 `web.searchProvider` 的钉住，并把 `web-search-deepseek` 重新 `disabled: false`（或钉住另一个已装的搜索 provider）。只解开钉住是不够的：本 bundle 已经禁用了自带的搜索 provider，解开后没有任何可用搜索 provider，seam 会以 `WEB_PROVIDER_UNAVAILABLE`（而不是 `WEB_PROVIDER_CONFIGURED_MISSING`）失败。

@@ -111,12 +111,29 @@ export class TavilySearchProvider implements WebSearchProvider {
     })
   }
 
-  /** A cheap local usability check: at least one credential and a usable config shape. */
+  /**
+   * A cheap local usability check: at least one credential and a usable config
+   * shape. While the first credentials read is still in flight the pool cannot
+   * yet answer, so a live key source keeps the provider selectable and the
+   * request itself re-reads the credential plane before touching the API.
+   */
   available(): boolean {
     const { maxResults } = this.options
-    return this.pool.size > 0
+    const usable = this.pool.size > 0 || this.options.keySource?.isWarming() === true
+    return usable
       && URL.canParse(this.options.baseURL)
       && (maxResults === undefined || (Number.isInteger(maxResults) && maxResults > 0))
+  }
+
+  /**
+   * Re-read the credential plane and adopt it, keeping every key's cooldown
+   * state, so a key added or removed from the configuration card reaches this
+   * call.
+   */
+  private async syncKeys(): Promise<void> {
+    const source = this.options.keySource
+    if (source === undefined) return
+    this.pool.reconcile(await source.refresh())
   }
 
   /**
@@ -127,6 +144,7 @@ export class TavilySearchProvider implements WebSearchProvider {
    * @returns the normalized search result.
    */
   async search(request: WebSearchRequest, signal?: AbortSignal): Promise<WebSearchResult> {
+    await this.syncKeys()
     const maxResults = request.maxResults ?? this.options.maxResults
     const attempts = Math.max(1, Math.min(this.options.maxAttempts ?? this.pool.size, this.pool.size))
     const failures: { entry: KeyPoolEntry, error: AttemptFailure }[] = []

@@ -32,17 +32,40 @@ function only<T>(providers: readonly T[]): T {
   return provider
 }
 
+/** A credentials service stand-in: a reference resolves to its stored value. */
+interface FakeCredentials {
+  resolve(ref: string): Promise<{ readonly value?: unknown } | undefined>
+}
+
 /**
  * A minimal stand-in for the context the loader hands `apply`: the web seam's
- * two registration points, the launch-environment snapshot and the logger that
- * reports an unkeyed pool. The double is asserted into the seam's shape
+ * two registration points, the launch-environment snapshot, the logger that
+ * reports an unkeyed pool, the effect registry and the event bus the credential
+ * source subscribes to. The double is asserted into the seam's shape
  * deliberately, because a real Cordis `Context` carries the whole plugin
  * runtime and only these members are read.
  * @param environment - the variables this launch provides.
+ * @param credentials - the credentials service, when the composition has one.
  */
-function fakeContext(environment: Record<string, string> = {}) {
+function fakeContext(environment: Record<string, string> = {}, credentials?: FakeCredentials) {
   const registered = { search: [] as TavilySearchProvider[], fetch: [] as FirecrawlFetchProvider[] }
   const warnings: string[] = []
+  const listeners = new Map<string, Set<(argument: unknown) => void>>()
+  const disposers: (() => void)[] = []
+
+  /** Run one event's listeners, as the event bus would. */
+  const emit = (event: string, argument?: unknown): void => {
+    for (const listener of [...(listeners.get(event) ?? [])]) listener(argument)
+  }
+
+  /** Dispose the effects `apply` registered, as a fiber teardown would. */
+  const dispose = (): void => {
+    for (const disposer of disposers.splice(0)) disposer()
+  }
+
+  /** How many listeners are currently attached to one event. */
+  const listenerCount = (event: string): number => listeners.get(event)?.size ?? 0
+
   const ctx = {
     web: {
       registerSearchProvider(provider: TavilySearchProvider) {
@@ -59,13 +82,28 @@ function fakeContext(environment: Record<string, string> = {}) {
         warnings.push(String(message))
       },
     },
+    effect(body: () => unknown) {
+      const cleanup = body()
+      if (typeof cleanup === 'function') disposers.push(cleanup as () => void)
+      return cleanup
+    },
+    on(event: string, listener: (argument: unknown) => void) {
+      const attached = listeners.get(event) ?? new Set<(argument: unknown) => void>()
+      attached.add(listener)
+      listeners.set(event, attached)
+      return () => { attached.delete(listener) }
+    },
     get(serviceName: string) {
+      if (serviceName === 'credentials') return credentials
       if (serviceName !== 'launchEnvironment') return undefined
       return { get: (variableName: string) => (environment[variableName] === undefined ? undefined : { value: environment[variableName] }) }
     },
   } as unknown as Context
-  return { registered, warnings, ctx }
+  return { registered, warnings, ctx, emit, dispose, listenerCount }
 }
+
+/** Let one microtask turn pass, so a settled credential read is observable. */
+const settled = (): Promise<void> => new Promise((resolve) => { setTimeout(resolve, 0) })
 
 describe('plugin entry', () => {
   it('the plugin is a web-seam row named for loader diagnostics', () => {
@@ -193,12 +231,71 @@ describe('plugin entry', () => {
     expect(resolveCredentialKeys(undefined, undefined, undefined, undefined)).toEqual([])
   })
 
-  it('a side enabled without a credential warns at load, and warns about it by name', () => {
+  it('a side enabled without a credential warns at load, and warns about it by name', async () => {
     const { ctx, warnings } = fakeContext()
     apply(ctx, configure({}))
+    await settled()
     expect(warnings).toHaveLength(2)
     expect(warnings[0]).toMatch(/tavily search registered without an API key/)
     expect(warnings[1]).toMatch(/firecrawl fetch registered without an API key/)
+  })
+
+  it('keys stored in the credentials domain reach the pool without a restart', async () => {
+    const stored = new Map<string, string>([
+      ['TAVILY_API_KEYS', 'tvly-stored-a, tvly-stored-b'],
+      ['FIRECRAWL_API_KEYS', 'fc-stored'],
+    ])
+    const credentials: FakeCredentials = {
+      resolve: async (ref) => (stored.has(ref) ? { value: stored.get(ref) } : undefined),
+    }
+    const harness = fakeContext({}, credentials)
+    apply(harness.ctx, configure({}))
+    await settled()
+
+    const search = only(harness.registered.search)
+    const fetch = only(harness.registered.fetch)
+    expect(search.pool.entries.map((entry) => entry.key)).toEqual(['tvly-stored-a', 'tvly-stored-b'])
+    expect(fetch.pool.entries.map((entry) => entry.key)).toEqual(['fc-stored'])
+    expect(search.available(), 'a stored key makes the provider usable').toBe(true)
+    expect(harness.warnings, 'both sides keyed must stay quiet').toEqual([])
+
+    // A write from the plugin's configuration page commits on the Host and
+    // fans out this event; the pool must follow it in place.
+    stored.set('TAVILY_API_KEYS', 'tvly-replaced')
+    harness.emit('credentials/reference-updated', 'TAVILY_API_KEYS')
+    await settled()
+    expect(search.pool.entries.map((entry) => entry.key)).toEqual(['tvly-replaced'])
+    expect(fetch.pool.entries.map((entry) => entry.key), 'the other side is untouched').toEqual(['fc-stored'])
+
+    // An unrelated reference is not this source's business.
+    stored.set('TAVILY_API_KEYS', 'tvly-should-not-appear')
+    harness.emit('credentials/reference-updated', 'UNRELATED_REF')
+    await settled()
+    expect(search.pool.entries.map((entry) => entry.key)).toEqual(['tvly-replaced'])
+  })
+
+  it('a volatile config reference is read like a plain value', () => {
+    const config = configure({})
+    // What a runtime that commits volatile config hands `apply`: a `Volatile`
+    // reference instead of the parsed array.
+    const search = config.search as unknown as { apiKeys?: unknown }
+    search.apiKeys = { get: () => ['tvly-live'] }
+    const { ctx, registered } = fakeContext()
+    apply(ctx, config)
+    expect(only(registered.search).pool.entries.map((entry) => entry.key)).toEqual(['tvly-live'])
+    expect(only(registered.fetch).pool.entries, 'a side without volatile keys keeps its plain path').toHaveLength(0)
+  })
+
+  it('disposing the fiber detaches every credential listener', async () => {
+    const harness = fakeContext()
+    apply(harness.ctx, configure({}))
+    await settled()
+    expect(harness.listenerCount('credentials/reference-updated')).toBe(2)
+    expect(harness.listenerCount('loader/volatile-update')).toBe(2)
+
+    harness.dispose()
+    expect(harness.listenerCount('credentials/reference-updated')).toBe(0)
+    expect(harness.listenerCount('loader/volatile-update')).toBe(0)
   })
 
   it('a keyed pool registers without any warning', () => {

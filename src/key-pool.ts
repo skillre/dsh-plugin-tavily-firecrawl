@@ -97,21 +97,43 @@ export interface RotationFailure {
   readonly error: AttemptFailureLike
 }
 
+/**
+ * A live credential list a provider consults synchronously and refreshes
+ * asynchronously. Implemented by the credentials-backed source; tests may
+ * hand a provider any object of this shape.
+ */
+export interface KeySource {
+  /** The keys in force as of the last refresh. */
+  current(): readonly string[]
+  /** Whether the first credentials read has not settled yet, so a pool verdict would be premature. */
+  isWarming(): boolean
+  /** Re-read the credential plane; resolves with the keys now in force. */
+  refresh(): Promise<readonly string[]>
+}
+
 /** The credential material a provider instance is built from. */
 export interface CredentialOptions {
   /** One credential (legacy single-key form). */
   readonly apiKey?: string | undefined
   /** The credential pool; wins over `apiKey`. */
   readonly apiKeys?: readonly string[] | undefined
+  /**
+   * Live credential source; when present it owns the list entirely (including
+   * any configured keys) and is refreshed at request start.
+   */
+  readonly keySource?: KeySource | undefined
 }
 
 /**
- * The credential list a provider instance should rotate over. `apiKeys` wins
- * over the legacy single `apiKey`; blanks are dropped by the pool itself.
+ * The credential list a provider instance should rotate over. A live
+ * {@link KeySource} owns the list when one is configured; otherwise `apiKeys`
+ * wins over the legacy single `apiKey` and blanks are dropped by the pool.
  * @param options - provider options.
  * @returns the candidates.
  */
 export function collectKeys(options?: CredentialOptions | undefined): readonly string[] {
+  const source = options?.keySource
+  if (source !== undefined) return source.current()
   const listed = options?.apiKeys
   if (Array.isArray(listed) && listed.length > 0) return listed
   const single = options?.apiKey
@@ -203,12 +225,47 @@ function positive(value: number | undefined, fallback: number): number {
   return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : fallback
 }
 
+/**
+ * Trim, drop blanks and collapse duplicates: one canonical credential list in
+ * first-seen order, so the same key pasted in both `apiKey` and `apiKeys`
+ * cannot be counted twice.
+ * @param keys - candidate credentials, possibly messy.
+ * @returns the canonical list.
+ */
+function normalizeKeys(keys: readonly (string | null | undefined)[] | undefined): string[] {
+  const seen = new Set<string>()
+  const normalized: string[] = []
+  for (const raw of keys ?? []) {
+    const key = typeof raw === 'string' ? raw.trim() : ''
+    if (key.length === 0 || seen.has(key)) continue
+    seen.add(key)
+    normalized.push(key)
+  }
+  return normalized
+}
+
+/** Build one pool entry for a credential at a known position. */
+function newEntry(key: string, index: number): KeyPoolEntry {
+  return {
+    key,
+    label: maskKey(key, index),
+    dead: false,
+    coolingUntil: 0,
+    quotaStrikes: 0,
+    lastError: undefined,
+  }
+}
+
 /** One credential plus the bookkeeping the pool keeps about it. */
 export interface KeyPoolEntry {
   /** The credential itself. */
   readonly key: string
-  /** The masked display label used in error messages. */
-  readonly label: string
+  /**
+   * The masked display label used in error messages. Re-derived on
+   * {@link KeyPool.reconcile}, because a label names a key's position and
+   * positions shift when the credential list changes.
+   */
+  label: string
   /** True once the API rejected the credential itself (HTTP 401). */
   dead: boolean
   /** Epoch milliseconds until which the key is out of rotation; `Infinity` when dead. */
@@ -264,23 +321,37 @@ export class KeyPool {
    * @param options - cooldown tuning.
    */
   constructor(keys: readonly (string | null | undefined)[] | undefined, options: KeyPoolOptions = {}) {
-    const seen = new Set<string>()
-    for (const raw of keys ?? []) {
-      const key = typeof raw === 'string' ? raw.trim() : ''
-      if (key.length === 0 || seen.has(key)) continue
-      seen.add(key)
-      this.entries.push({
-        key,
-        label: maskKey(key, this.entries.length),
-        dead: false,
-        coolingUntil: 0,
-        quotaStrikes: 0,
-        lastError: undefined,
-      })
-    }
+    for (const [index, key] of normalizeKeys(keys).entries()) this.entries.push(newEntry(key, index))
     this.rateLimitCooldownMs = positive(options.rateLimitCooldownMs, DEFAULT_RATE_LIMIT_COOLDOWN_MS)
     this.quotaCooldownMs = positive(options.quotaCooldownMs, DEFAULT_QUOTA_COOLDOWN_MS)
     this.quotaCooldownMaxMs = positive(options.quotaCooldownMaxMs, DEFAULT_QUOTA_COOLDOWN_MAX_MS)
+  }
+
+  /**
+   * Adopt a newly read credential list, keeping what the pool already knows.
+   *
+   * The credential plane is live: a key can be added from the plugin's
+   * configuration card, replaced, or removed while the process runs. Entries
+   * whose key survives keep their cooldown, strike count and rejection state —
+   * re-reading must not hand a cooling credential back to rotation — while
+   * keys that disappeared are dropped with their state and new keys join
+   * clean. Labels are re-derived, since they name a position.
+   * @param keys - the freshly resolved credentials, in priority order.
+   */
+  reconcile(keys: readonly (string | null | undefined)[] | undefined): void {
+    const previous = new Map(this.entries.map((entry) => [entry.key, entry]))
+    const wanted = normalizeKeys(keys)
+    this.entries.length = 0
+    for (const [index, key] of wanted.entries()) {
+      const existing = previous.get(key)
+      if (existing === undefined) {
+        this.entries.push(newEntry(key, index))
+        continue
+      }
+      existing.label = maskKey(key, index)
+      this.entries.push(existing)
+    }
+    this.cursor = this.entries.length === 0 ? 0 : this.cursor % this.entries.length
   }
 
   /** How many credentials the pool was configured with. */

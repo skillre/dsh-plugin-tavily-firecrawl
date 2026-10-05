@@ -105,12 +105,29 @@ export class FirecrawlFetchProvider implements WebFetchProvider {
     })
   }
 
-  /** A cheap local usability check: at least one credential and a usable config shape. */
+  /**
+   * A cheap local usability check: credential plus config shape. While the
+   * first credentials read is still in flight the pool cannot yet answer, so a
+   * live key source keeps the provider selectable and the request itself
+   * re-reads the credential plane before touching the API.
+   */
   available(): boolean {
-    return this.pool.size > 0
+    const usable = this.pool.size > 0 || this.options.keySource?.isWarming() === true
+    return usable
       && URL.canParse(this.options.baseURL)
       && Number.isInteger(this.options.timeoutMs) && this.options.timeoutMs > 0
       && Number.isInteger(this.options.maxBodyChars) && this.options.maxBodyChars > 0
+  }
+
+  /**
+   * Re-read the credential plane and adopt it, keeping every key's cooldown
+   * state, so a key added or removed from the configuration card reaches this
+   * call.
+   */
+  private async syncKeys(): Promise<void> {
+    const source = this.options.keySource
+    if (source === undefined) return
+    this.pool.reconcile(await source.refresh())
   }
 
   /**
@@ -121,6 +138,7 @@ export class FirecrawlFetchProvider implements WebFetchProvider {
    * @returns the seam's fetch result.
    */
   async fetch(request: WebFetchRequest, signal?: AbortSignal): Promise<WebFetchResult> {
+    await this.syncKeys()
     const attempts = Math.max(1, Math.min(this.options.maxAttempts ?? this.pool.size, this.pool.size))
     const failures: { entry: KeyPoolEntry, error: AttemptFailure }[] = []
     for (let attempt = 0; attempt < attempts; attempt += 1) {

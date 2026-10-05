@@ -90,6 +90,31 @@ describe('key-pool', () => {
     expect(pool.ready().map((entry) => entry.key)).toEqual(['a', 'b'])
   })
 
+  it('reconcile carries credential state across a live key-list change', () => {
+    const cooling = 'tvly-bbbbbbbbbbbbbbbb'
+    const pool = new KeyPool(['tvly-aaaaaaaaaaaaaaaa', cooling])
+    pool.reportFailure(entryFor(pool, cooling), KEY_FAILURE.QUOTA, 'HTTP 432: plan limit')
+
+    // A refreshed list: the cooling key stays (with its state), a new key joins
+    // clean, blanks and duplicates collapse, and the leaving key takes its
+    // state with it.
+    pool.reconcile([cooling, 'tvly-cccccccccccccccc', ' ', 'tvly-cccccccccccccccc'])
+    expect(pool.entries.map((entry) => entry.key)).toEqual([cooling, 'tvly-cccccccccccccccc'])
+    expect(pool.entries[0]?.quotaStrikes, 'a re-read must not hand a cooling key back').toBe(1)
+    expect(pool.entries[1]?.quotaStrikes).toBe(0)
+    expect(pool.entries[0]?.label, 'labels follow position, not identity').toBe('#1 (tvly-b…bbbb)')
+    expect(pool.describe()).toBe('1/2 keys ready, 1 cooling')
+
+    pool.reconcile(['tvly-cccccccccccccccc'])
+    expect(pool.size).toBe(1)
+    expect(pool.describe(), 'the removed key takes its cooldown with it').toBe('1/1 key ready')
+
+    pool.reconcile([])
+    expect(pool.size).toBe(0)
+    expect(pool.describe()).toBe('0/0 keys ready')
+    expect(pool.next()).toBeUndefined()
+  })
+
   it('KeyPool hands out credentials round-robin without repeats until wrapped', () => {
     const pool = new KeyPool(['a', 'b', 'c'])
     expect(pool.next()?.key).toBe('a')

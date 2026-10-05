@@ -18,9 +18,9 @@
  * @module @skillre/dsh-plugin-tavily-firecrawl
  */
 
-import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
+import { CredentialKeys, readVolatile } from './credential-keys.js'
 import {
   TAVILY_DEFAULT_BASE_URL,
   TAVILY_DEFAULT_INCLUDE_ANSWER,
@@ -36,6 +36,7 @@ import {
   FirecrawlFetchProvider,
 } from './fetch.js'
 import { parseKeyList } from './key-pool.js'
+import type { KeyPool } from './key-pool.js'
 
 export { TAVILY_PROVIDER_ID, TavilySearchProvider } from './search.js'
 export type { TavilySearchDepth, TavilySearchProviderOptions } from './search.js'
@@ -54,12 +55,19 @@ export const inject = ['web']
  * The `search.*` fields {@link Config} declares, as one dict: the schema and
  * the unknown-key guard below are built from this object, so a field can never
  * be added to the schema without the guard accepting it (or vice versa).
+ *
+ * The credential fields are marked `.volatile()` and `.role('secret')`:
+ * `volatile` is what puts this entry on the configuration surface (the settings
+ * service only describes schemas with live fields) and lets a committed change
+ * reach the running plugin without a remount, while `secret` keeps the literal
+ * off the wire — a configuration surface receives it redacted and writes it
+ * back through the redaction-aware path.
  */
 const SEARCH_FIELDS = {
-  /** Literal Tavily API key; prefer the launch-env fallbacks. */
-  apiKey: z.string(),
+  /** Literal Tavily API key; prefer the credential reference or the launch environment. */
+  apiKey: z.string().role('secret').volatile(),
   /** Tavily credential pool, rotated per request. Wins over `apiKey`. */
-  apiKeys: z.array(z.string()),
+  apiKeys: z.array(z.string()).role('secret').volatile(),
   /** Endpoint base; `/search` is appended. Defaults to the public API. */
   baseURL: z.string(),
   /** Retrieval depth sent as Tavily's `search_depth`. `basic` costs 1 credit, `advanced` 2. */
@@ -82,10 +90,10 @@ const SEARCH_FIELDS = {
 
 /** The `fetch.*` fields {@link Config} declares; see {@link SEARCH_FIELDS}. */
 const FETCH_FIELDS = {
-  /** Literal Firecrawl API key; prefer the launch-env fallbacks. */
-  apiKey: z.string(),
+  /** Literal Firecrawl API key; prefer the credential reference or the launch environment. */
+  apiKey: z.string().role('secret').volatile(),
   /** Firecrawl credential pool, rotated per request. Wins over `apiKey`. */
-  apiKeys: z.array(z.string()),
+  apiKeys: z.array(z.string()).role('secret').volatile(),
   /** Endpoint base; `/v1/scrape` is appended. Defaults to the public API. */
   baseURL: z.string(),
   /** Provider-side request timeout in milliseconds. */
@@ -192,9 +200,55 @@ export function resolveCredentialKeys(
   return inherited === undefined ? [] : [inherited]
 }
 
+/** Credential reference this plugin resolves for Tavily keys (list form). */
+export const TAVILY_CREDENTIAL_REF = 'TAVILY_API_KEYS'
+
+/** Credential reference this plugin resolves for one Tavily key (single form). */
+export const TAVILY_CREDENTIAL_REF_SINGULAR = 'TAVILY_API_KEY'
+
+/** Credential reference this plugin resolves for Firecrawl keys (list form). */
+export const FIRECRAWL_CREDENTIAL_REF = 'FIRECRAWL_API_KEYS'
+
+/** Credential reference this plugin resolves for one Firecrawl key (single form). */
+export const FIRECRAWL_CREDENTIAL_REF_SINGULAR = 'FIRECRAWL_API_KEY'
+
 /** Trim one credential candidate, treating blanks as absent. */
 function singleKey(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined
+}
+
+/**
+ * Tie one side's credential source to its provider for the life of this fiber:
+ * every settled refresh reconciles the provider's pool (so a key written from
+ * the configuration page reaches the registry without a restart), the first
+ * read starts immediately, and the credential/config listeners are attached
+ * until the fiber tears down.
+ * @param ctx - the plugin context.
+ * @param source - the side's credential source.
+ * @param provider - the side's provider, when that side is enabled.
+ * @param onFirstEmpty - called once if the first read settles without a credential.
+ */
+function followCredentialSource(
+  ctx: Context,
+  source: CredentialKeys,
+  provider: { readonly pool: KeyPool } | undefined,
+  onFirstEmpty: () => void,
+): void {
+  let reported = false
+  ctx.effect(() => {
+    const stopObserve = source.observe((keys) => {
+      provider?.pool.reconcile(keys)
+      if (reported) return
+      reported = true
+      if (keys.length === 0) onFirstEmpty()
+    })
+    void source.refresh()
+    const stopWatch = source.watch()
+    return () => {
+      stopObserve()
+      stopWatch()
+    }
+  }, 'skillre-tavily-firecrawl: credential source')
 }
 
 /** Register the providers with `ctx.web`. Either side can be opted out. */
@@ -202,48 +256,67 @@ export function apply(ctx: Context, config: PluginConfig): void {
   // Schemastery keeps unknown keys, so a typo would otherwise load silently.
   assertKnownConfigKeys(config)
 
-  // Every launch environment layer may name these keys (inherited env,
-  // `<invocation cwd>/.env`, `$DSH_HOME/.env`); the plural form carries a list.
-  const environment = launchEnvironmentOf(ctx)
-  const fromEnvironment = (variableName: string): string | undefined => environment.get(variableName)?.value
+  // Credentials are read live: configuration wins, then the credentials
+  // domain (`TAVILY_API_KEY(S)` / `FIRECRAWL_API_KEY(S)` — the reference the
+  // configuration page writes), then the launch environment. Reading them
+  // through a source instead of a frozen list is what lets a key added from
+  // the plugin's configuration page reach the next request without a restart.
+  const searchKeys = new CredentialKeys(ctx, {
+    configured: () => resolveCredentialKeys(
+      readVolatile(config.search?.apiKeys),
+      readVolatile(config.search?.apiKey),
+      undefined,
+      undefined,
+    ),
+    ref: TAVILY_CREDENTIAL_REF,
+    singularRef: TAVILY_CREDENTIAL_REF_SINGULAR,
+  })
+  const fetchKeys = new CredentialKeys(ctx, {
+    configured: () => resolveCredentialKeys(
+      readVolatile(config.fetch?.apiKeys),
+      readVolatile(config.fetch?.apiKey),
+      undefined,
+      undefined,
+    ),
+    ref: FIRECRAWL_CREDENTIAL_REF,
+    singularRef: FIRECRAWL_CREDENTIAL_REF_SINGULAR,
+  })
 
-  if (config.searchEnabled !== false) {
-    const searchMaxResults = config.search?.maxResults
-    const provider = new TavilySearchProvider({
-      apiKeys: resolveCredentialKeys(config.search?.apiKeys, config.search?.apiKey, fromEnvironment('TAVILY_API_KEYS'), fromEnvironment('TAVILY_API_KEY')),
-      baseURL: config.search?.baseURL ?? TAVILY_DEFAULT_BASE_URL,
-      searchDepth: config.search?.searchDepth ?? TAVILY_DEFAULT_SEARCH_DEPTH,
-      includeAnswer: config.search?.includeAnswer ?? TAVILY_DEFAULT_INCLUDE_ANSWER,
-      timeoutMs: config.search?.timeoutMs ?? TAVILY_DEFAULT_TIMEOUT_MS,
-      maxAttempts: config.search?.maxAttempts,
-      rateLimitCooldownMs: config.search?.rateLimitCooldownMs,
-      quotaCooldownMs: config.search?.quotaCooldownMs,
-      quotaCooldownMaxMs: config.search?.quotaCooldownMaxMs,
-      ...(searchMaxResults !== undefined ? { maxResults: searchMaxResults } : {}),
-    })
-    // The bundle patch pins `web.searchProvider` to this id, so an unkeyed pool
-    // cannot fall through to another provider: say so at load time instead of
-    // leaving only a generic tool-side WEB_PROVIDER_CONFIGURED_UNAVAILABLE.
-    if (provider.pool.size === 0) {
-      ctx.logger.warn('tavily search registered without an API key: web_search stays unavailable until `search.apiKeys` or TAVILY_API_KEY(S) is set')
-    }
-    ctx.web.registerSearchProvider(provider)
-  }
-  if (config.fetchEnabled !== false) {
-    const provider = new FirecrawlFetchProvider({
-      apiKeys: resolveCredentialKeys(config.fetch?.apiKeys, config.fetch?.apiKey, fromEnvironment('FIRECRAWL_API_KEYS'), fromEnvironment('FIRECRAWL_API_KEY')),
-      baseURL: config.fetch?.baseURL ?? FIRECRAWL_DEFAULT_BASE_URL,
-      timeoutMs: config.fetch?.timeoutMs ?? FIRECRAWL_DEFAULT_TIMEOUT_MS,
-      maxBodyChars: config.fetch?.maxBodyChars ?? FIRECRAWL_DEFAULT_MAX_BODY_CHARS,
-      onlyMainContent: config.fetch?.onlyMainContent ?? FIRECRAWL_DEFAULT_ONLY_MAIN_CONTENT,
-      maxAttempts: config.fetch?.maxAttempts,
-      rateLimitCooldownMs: config.fetch?.rateLimitCooldownMs,
-      quotaCooldownMs: config.fetch?.quotaCooldownMs,
-      quotaCooldownMaxMs: config.fetch?.quotaCooldownMaxMs,
-    })
-    if (provider.pool.size === 0) {
-      ctx.logger.warn('firecrawl fetch registered without an API key: web_fetch stays unavailable until `fetch.apiKeys` or FIRECRAWL_API_KEY(S) is set')
-    }
-    ctx.web.registerFetchProvider(provider)
-  }
+  const searchProvider = config.searchEnabled === false ? undefined : new TavilySearchProvider({
+    keySource: searchKeys,
+    baseURL: config.search?.baseURL ?? TAVILY_DEFAULT_BASE_URL,
+    searchDepth: config.search?.searchDepth ?? TAVILY_DEFAULT_SEARCH_DEPTH,
+    includeAnswer: config.search?.includeAnswer ?? TAVILY_DEFAULT_INCLUDE_ANSWER,
+    timeoutMs: config.search?.timeoutMs ?? TAVILY_DEFAULT_TIMEOUT_MS,
+    maxAttempts: config.search?.maxAttempts,
+    rateLimitCooldownMs: config.search?.rateLimitCooldownMs,
+    quotaCooldownMs: config.search?.quotaCooldownMs,
+    quotaCooldownMaxMs: config.search?.quotaCooldownMaxMs,
+    ...(config.search?.maxResults !== undefined ? { maxResults: config.search.maxResults } : {}),
+  })
+  const fetchProvider = config.fetchEnabled === false ? undefined : new FirecrawlFetchProvider({
+    keySource: fetchKeys,
+    baseURL: config.fetch?.baseURL ?? FIRECRAWL_DEFAULT_BASE_URL,
+    timeoutMs: config.fetch?.timeoutMs ?? FIRECRAWL_DEFAULT_TIMEOUT_MS,
+    maxBodyChars: config.fetch?.maxBodyChars ?? FIRECRAWL_DEFAULT_MAX_BODY_CHARS,
+    onlyMainContent: config.fetch?.onlyMainContent ?? FIRECRAWL_DEFAULT_ONLY_MAIN_CONTENT,
+    maxAttempts: config.fetch?.maxAttempts,
+    rateLimitCooldownMs: config.fetch?.rateLimitCooldownMs,
+    quotaCooldownMs: config.fetch?.quotaCooldownMs,
+    quotaCooldownMaxMs: config.fetch?.quotaCooldownMaxMs,
+  })
+
+  // The bundle patch pins both ids to this plugin, so an unkeyed side cannot
+  // fall through to another provider: say so once the first credential read
+  // settles instead of leaving only a generic tool-side
+  // WEB_PROVIDER_CONFIGURED_UNAVAILABLE on the first call.
+  followCredentialSource(ctx, searchKeys, searchProvider, () => {
+    ctx.logger.warn('tavily search registered without an API key: web_search stays unavailable until `search.apiKeys`, TAVILY_API_KEY(S), or the plugin configuration page supplies one')
+  })
+  followCredentialSource(ctx, fetchKeys, fetchProvider, () => {
+    ctx.logger.warn('firecrawl fetch registered without an API key: web_fetch stays unavailable until `fetch.apiKeys`, FIRECRAWL_API_KEY(S), or the plugin configuration page supplies one')
+  })
+
+  if (searchProvider !== undefined) ctx.web.registerSearchProvider(searchProvider)
+  if (fetchProvider !== undefined) ctx.web.registerFetchProvider(fetchProvider)
 }
