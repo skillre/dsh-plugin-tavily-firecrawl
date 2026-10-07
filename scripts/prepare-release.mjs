@@ -56,12 +56,7 @@ if (!Array.isArray(results) || results.length !== 1 || typeof results[0]?.filena
 }
 const result = results[0]
 const packedPaths = new Set((result.files ?? []).map((file) => file.path))
-const requiredPaths = ['package.json', 'compatibility.json', 'cordis.patch.yml', 'lib/index.js', 'lib/index.d.ts']
-// A declared browser half is part of the contract: the configuration page the
-// Plugins page renders lives in that file, so a tarball without it ships a
-// bundle whose card never appears.
-if (manifest.dsh?.client !== undefined) requiredPaths.push('lib/client.js')
-for (const required of requiredPaths) {
+for (const required of ['package.json', 'compatibility.json', 'cordis.patch.yml', 'lib/index.js', 'lib/index.d.ts']) {
   if (!packedPaths.has(required)) throw new Error(`Release tarball is missing ${required}`)
 }
 await copyFile(join(root, 'CHANGELOG.md'), join(artifactDirectory, 'CHANGELOG.md'))

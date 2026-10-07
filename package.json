@@ -68,12 +68,13 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json --noEmit",
     "test": "npm run build:client && vitest run",
     "pack:check": "npm run build && publint && npm pack --dry-run --json --ignore-scripts",
-    "check": "npm run typecheck && npm test && npm run pack:check",
+    "check": "npm run typecheck && npm test && npm run pack:check && npm run artifacts:check",
     "changeset": "changeset",
     "version": "changeset version",
     "release:prepare": "node scripts/prepare-release.mjs",
     "prepack": "npm run build",
-    "build:client": "node scripts/build-client.mjs"
+    "build:client": "node scripts/build-client.mjs",
+    "artifacts:check": "node scripts/assert-lib-fresh.mjs"
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "^3.18.4"

@@ -26,7 +26,7 @@ Tavily search and Firecrawl fetch providers for the DeepSeek Harness web seam, w
 
 ## 安装
 
-完成兼容性验证并交付后，**用户**在 DSH Desktop Client 或 Web UI 的 **Plugins/插件管理**中自行选择来源、安装/更新及启用；开发者/agent 不在用户 profile 代装。发布且目标版本兼容、管理器确认可安装时，可输入 npm 包名 `@skillre/dsh-plugin-tavily-firecrawl@<version>`。未发布时，可提供已构建、验证可用的本地包目录或 `.tgz` **绝对路径**，须先确认目标管理器支持。GitHub URL 只有在管理器支持、仓库含安全且自包含的 `prepare` 构建并通过安装验证后才能列为来源；原始 Git 源码不是自动可用的成品。
+完成兼容性验证并交付后，**用户**在 DSH Desktop Client 或 Web UI 的 **Plugins/插件管理**中自行选择来源、安装/更新及启用；开发者/agent 不在用户 profile 代装。发布且目标版本兼容、管理器确认可安装时，可输入 npm 包名 `@skillre/dsh-plugin-tavily-firecrawl@<version>`。未发布时，可提供已构建、验证可用的本地包目录或 `.tgz` **绝对路径**，须先确认目标管理器支持。**GitHub 仓库是本包支持的安装来源**：git 树里就带着构建产物（`lib/`，含浏览器半 `lib/client.js`），所以从 GitHub 安装**不执行任何构建脚本**。pnpm 只有在解包目录里找不到 `main`（`lib/index.js`）时才判定"需要构建"并要求 `allowBuilds` 白名单放行；产物入库后这一步直接跳过（反过来，若提供 `prepare` 构建就会触发同一道门禁）。`npm run check` 末尾的 `artifacts:check` 用 `git status -- lib` 保证提交的产物与源码一致，因此 GitHub 上装到的永远是与该提交源码相符的可运行版本。注意：安装解析到的是某个**提交 SHA**，想要新功能必须先把它推到 GitHub。
 
 仅供开发者临时测试的内环（**自有、可丢弃的非 Desktop profile，必须走打包 tarball**）：
 

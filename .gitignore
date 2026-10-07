@@ -1,5 +1,7 @@
 node_modules/
-lib/
+# lib/ is committed on purpose: a git-hosted install must find `main` already
+# built, otherwise pnpm treats the checkout as needing build scripts and
+# refuses to install it without an `allowBuilds` entry (see README "Install").
 coverage/
 release-artifact/
 *.tgz
