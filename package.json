@@ -93,9 +93,11 @@
     "@deepseek-ai/dsh-web": "^0.1.7-rc.2 || ^0.2.0-rc.2",
     "@types/node": "^24.13.3",
     "@types/react": "~18.3.1",
+    "@types/react-dom": "^18.3.1",
     "esbuild": "^0.25.12",
     "publint": "^0.3.24",
     "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "typescript": "5.9.3",
     "vitest": "^4.1.8"
   }
