@@ -1,0 +1,1 @@
+![Two labelled panels side by side inside DSH: the web_search panel shows a Tavily query returning a synthesised answer plus cited source cards, the web_fetch panel shows a Firecrawl markdown extraction of one page; a key pool strip beneath both shows three credentials rotating with one cooling down](preview.svg)

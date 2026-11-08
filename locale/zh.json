@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Tavily 搜索 + Firecrawl 抓取",
+    "description": "把 DSH 的联网搜索与网页抓取换成 Tavily 和 Firecrawl，多密钥池自动轮询，绕过单账号限流。",
+    "detail": "docs/DETAIL.zh.md"
+  }
+}

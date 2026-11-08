@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="600" viewBox="0 0 1280 600">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#171a21"/>
+      <stop offset="0.6" stop-color="#12141a"/>
+      <stop offset="1" stop-color="#0d0f13"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1e222b"/>
+      <stop offset="1" stop-color="#191c24"/>
+    </linearGradient>
+    <linearGradient id="accentGlow" x1="0" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#3d7dff" stop-opacity="0.20"/>
+      <stop offset="1" stop-color="#3d7dff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="warmGlow" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff8a4c" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#ff8a4c" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1280" height="600" fill="url(#bg)"/>
+  <ellipse cx="330" cy="120" rx="330" ry="180" fill="url(#accentGlow)"/>
+  <ellipse cx="980" cy="520" rx="340" ry="190" fill="url(#warmGlow)"/>
+
+  <text x="56" y="62" font-family="Noto Sans SC, Helvetica, Arial, sans-serif" font-size="27" font-weight="600" fill="#eef2f8">Tavily Search + Firecrawl Fetch</text>
+  <text x="56" y="92" font-family="Noto Sans SC, Helvetica, Arial, sans-serif" font-size="16" fill="#7d8798">ctx.web providers behind web_search and web_fetch</text>
+
+  <rect x="1040" y="42" width="184" height="38" rx="19" fill="#22304d"/>
+  <circle cx="1064" cy="61" r="6" fill="#4ade80"/>
+  <text x="1080" y="67" font-family="Noto Sans SC, Helvetica, Arial, sans-serif" font-size="15" fill="#a8c4ff">active · v0.1.0</text>
+
+  <rect x="56" y="120" width="556" height="330" rx="16" fill="url(#panel)" stroke="#2a3040"/>
+  <rect x="56" y="120" width="556" height="4" rx="2" fill="#3d7dff"/>
+  <text x="84" y="158" font-family="Noto Sans SC, Helvetica, Arial, sans-serif" font-size="15" font-weight="600" fill="#8fb3ff">web_search</text>
+  <rect x="470" y="140" width="118" height="26" rx="13" fill="#23304a"/>
+  <text x="486" y="158" font-family="Noto Sans SC, Helvetica, Arial, sans-serif" font-size="13" fill="#7fa8ff">tavily · basic</text>
+
+  <rect x="84" y="180" width="500" height="34" rx="8" fill="#161a22" stroke="#2c3345"/>
+  <text x="100" y="202" font-family="Noto Sans SC, Helvetica, Arial, sans-serif" font-size="14" fill="#9aa5b8">how do plugin providers get selected?</text>
+
+  <rect x="84" y="230" width="500" height="96" rx="10" fill="#18202e" stroke="#2b3a55"/>
+  <text x="100" y="254" font-family="Noto Sans SC, Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="#8fb3ff">ANSWER</text>
+  <text x="100" y="278" font-family="Noto Sans SC, Helvetica, Arial, sans-serif" font-size="13" fill="#c6cfdd">Selection resolves per call: a pinned provider id wins</text>
+  <text x="100" y="298" font-family="Noto Sans SC, Helvetica, Arial, sans-serif" font-size="13" fill="#c6cfdd">when registered and available, otherwise the single</text>
+  <text x="100" y="318" font-family="Noto Sans SC, Helvetica, Arial, sans-serif" font-size="13" fill="#c6cfdd">usable provider runs.</text>
+
+  <rect x="84" y="340" width="238" height="46" rx="9" fill="#1b1f28" stroke="#2a3040"/>
+  <circle cx="102" cy="357" r="5" fill="#3d7dff"/>
+  <text x="114" y="361" font-family="Noto Sans SC, Helvetica, Arial, sans-serif" font-size="12" fill="#aab4c4">docs.deepseek.com</text>
+  <text x="102" y="378" font-family="Noto Sans SC, Helvetica, Arial, sans-serif" font-size="11" fill="#6d7788">seam · providers</text>
+
+  <rect x="336" y="340" width="248" height="46" rx="9" fill="#1b1f28" stroke="#2a3040"/>
+  <circle cx="354" cy="357" r="5" fill="#3d7dff"/>
+  <text x="366" y="361" font-family="Noto Sans SC, Helvetica, Arial, sans-serif" font-size="12" fill="#aab4c4">tavily.com/docs</text>
+  <text x="354" y="378" font-family="Noto Sans SC, Helvetica, Arial, sans-serif" font-size="11" fill="#6d7788">search api</text>
+
+  <text x="84" y="418" font-family="Noto Sans SC, Helvetica, Arial, sans-serif" font-size="12" fill="#6d7788">4 sources · answer synthesised · snippet capped 600 chars</text>
+
+  <rect x="636" y="120" width="588" height="330" rx="16" fill="url(#panel)" stroke="#2a3040"/>
+  <rect x="636" y="120" width="588" height="4" rx="2" fill="#ff8a4c"/>
+  <text x="664" y="158" font-family="Noto Sans SC, Helvetica, Arial, sans-serif" font-size="15" font-weight="600" fill="#ffb27d">web_fetch</text>
+  <rect x="1064" y="140" width="132" height="26" rx="13" fill="#3a2a20"/>
+  <text x="1080" y="158" font-family="Noto Sans SC, Helvetica, Arial, sans-serif" font-size="13" fill="#ffab6e">firecrawl · md</text>
+
+  <rect x="664" y="180" width="532" height="30" rx="8" fill="#161a22" stroke="#2c3345"/>
+  <text x="680" y="200" font-family="Noto Sans SC, Helvetica, Arial, sans-serif" font-size="13" fill="#9aa5b8">https://example.com/guide</text>
+
+  <rect x="664" y="224" width="532" height="180" rx="10" fill="#161a22" stroke="#2c3345"/>
+  <text x="682" y="250" font-family="Noto Sans SC, Helvetica, Arial, sans-serif" font-size="12" fill="#ffb27d"># Getting started</text>
+  <text x="682" y="274" font-family="Noto Sans SC, Helvetica, Arial, sans-serif" font-size="12" fill="#c6cfdd">Main content only, headings and body preserved.</text>
+  <rect x="682" y="288" width="300" height="9" rx="4" fill="#242a36"/>
+  <rect x="682" y="306" width="452" height="9" rx="4" fill="#242a36"/>
+  <rect x="682" y="324" width="392" height="9" rx="4" fill="#242a36"/>
+  <rect x="682" y="342" width="430" height="9" rx="4" fill="#242a36"/>
+  <rect x="682" y="360" width="240" height="9" rx="4" fill="#242a36"/>
+  <text x="682" y="392" font-family="Noto Sans SC, Helvetica, Arial, sans-serif" font-size="11" fill="#6d7788">markdown · 200 OK · non-2xx page returns as a result</text>
+
+  <text x="664" y="428" font-family="Noto Sans SC, Helvetica, Arial, sans-serif" font-size="12" fill="#6d7788">body capped 200000 chars · truncated flagged</text>
+
+  <rect x="56" y="478" width="1168" height="82" rx="14" fill="#191c24" stroke="#2a3040"/>
+  <text x="84" y="508" font-family="Noto Sans SC, Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#eef2f8">Credential pool</text>
+  <text x="238" y="508" font-family="Noto Sans SC, Helvetica, Arial, sans-serif" font-size="12" fill="#6d7788">rotates per request · 401 retires a key · 429 cools it down</text>
+
+  <rect x="84" y="522" width="330" height="24" rx="6" fill="#1f2735" stroke="#2f4a72"/>
+  <circle cx="98" cy="534" r="4" fill="#4ade80"/>
+  <text x="110" y="539" font-family="Noto Sans SC, Helvetica, Arial, sans-serif" font-size="12" fill="#9fb4d4">#1  tvly-d…3f9a   ready</text>
+
+  <rect x="428" y="522" width="330" height="24" rx="6" fill="#1f2735" stroke="#2f4a72"/>
+  <circle cx="442" cy="534" r="4" fill="#4ade80"/>
+  <text x="454" y="539" font-family="Noto Sans SC, Helvetica, Arial, sans-serif" font-size="12" fill="#9fb4d4">#2  tvly-d…8c21   ready</text>
+
+  <rect x="772" y="522" width="330" height="24" rx="6" fill="#2b2320" stroke="#5c4030"/>
+  <circle cx="786" cy="534" r="4" fill="#fbbf24"/>
+  <text x="798" y="539" font-family="Noto Sans SC, Helvetica, Arial, sans-serif" font-size="12" fill="#d4b48c">#3  tvly-d…5b07   cooling 42s</text>
+
+  <text x="1116" y="539" font-family="Noto Sans SC, Helvetica, Arial, sans-serif" font-size="12" fill="#6d7788">+ firecrawl</text>
+</svg>

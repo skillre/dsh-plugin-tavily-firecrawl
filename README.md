@@ -54,6 +54,10 @@ dsh web
 
 更新：由用户在同一 **Plugins/插件管理**中选择经验证兼容的新版本并确认；不要由 agent 在用户 profile 执行 CLI 安装。卸载与回滚见 [UNINSTALL.md](UNINSTALL.md)；本包不提供 `install.sh` / `uninstall.sh`，也不使用 `--patch` 叠加层。
 
+**从 npm 安装才有「版本」区块。** 本包发布到 npm 后，用户以包名 `@skillre/dsh-plugin-tavily-firecrawl`
+安装即可在详情页获得 **Versions** 区块并一键原地更新；此前以 `github:` / `git+` / tarball 装过的实例
+**不会**出现该区块，只能卸载后改用 npm 包名重装。这是 DSH 的 `updateRefusal()` 判定，不是本包的选择。
+
 ## 开发原则
 
 1. 加载 Cordis 插件开发技能。
@@ -62,7 +66,7 @@ dsh web
 4. 将验证后的行为提升为 TypeScript、配置 schema、测试和 Bundle composition。
 5. 所有副作用必须在 stop/update 后清理。
 
-本包使用的运行时契约（`ctx.web` 的 `registerSearchProvider` / `registerFetchProvider` 经 `ctx.effect` 绑定 Fiber、重复 id 抛 `WebError('…already registered', 'WEB_DUPLICATE_PROVIDER')`、选择规则、`WEB_PROVIDER_CONFIGURED_MISSING` / `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`、`search()` 按 `maxResults` 截断 `sources[]` 并置 `truncated`、非 2xx 页面是结果而非异常）均通过 live Inspect 与随包源码核对：DSH `0.1.7-rc.2`（`2026-09-28`）与 `0.2.0-rc.2`（`2026-09-30` 应用更新后复检，`web` seam 签名逐字一致、随包组成行未变）。
+本包使用的运行时契约（`ctx.web` 的 `registerSearchProvider` / `registerFetchProvider` 经 `ctx.effect` 绑定 Fiber、重复 id 抛 `WebError('…already registered', 'WEB_DUPLICATE_PROVIDER')`、选择规则、`WEB_PROVIDER_CONFIGURED_MISSING` / `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`、`search()` 按 `maxResults` 截断 `sources[]` 并置 `truncated`、非 2xx 页面是结果而非异常）均通过 live Inspect 与随包源码核对：DSH `0.2.2-rc.1`（`2026-11-08`）四个签名与 `0.2.0-rc.2` 逐字一致。该线新增了两个**可选**成员 —— `WebSearchProvider.ready?()` / `WebFetchProvider.ready?()` 与 `WebSearchSource.summary?` —— 不构成破坏性变更，本包不实现它们也能正常工作（seam 把没有 `ready()` 的 provider 视为 ready）。
 
 ## Bundle
 
@@ -90,12 +94,43 @@ DSH 读取插件卡片信息时**不激活插件**，所以这些资源必须随
 
 本包实际发布的值：
 
-- 卡片标题：`Tavily Search + Firecrawl Fetch`
-- 卡片描述：`Tavily search and Firecrawl fetch providers for the DeepSeek Harness web seam, with a rotating multi-key credential pool`
-- 图标：`icon.svg`（DSH 舰队默认图标，发布前应换成本插件自己的图标）
-- 随包 locale：**仅 `locale/en.json`**，因此插件卡片的标题/描述目前只有英文（本 README 有中文版，卡片文案没有）
+- 卡片标题：`Tavily Search + Firecrawl Fetch` / `Tavily 搜索 + Firecrawl 抓取`
+- 卡片描述：`Swaps DSH web search and page fetch onto Tavily and Firecrawl, with a multi-key pool that rotates past rate limits.`
+  （中文：`把 DSH 的联网搜索与网页抓取换成 Tavily 和 Firecrawl，多密钥池自动轮询，绕过单账号限流。`）
+- 图标：`icon.svg`
+- 随包 locale：`locale/en.json` 与 `locale/zh.json`，两种语言的卡片文案与详情页都已就位
 
-`package.json#dsh.manifestVersion` 为 `1`。`engines.dsh` 声明本包真实挂载验证过的 DSH 行：range 只是文档，不是证据，实际挂载并记录在 `compatibility.json` 的只有 `0.1.7-rc.2`（2026-09-28）与 `0.2.0-rc.2`（2026-09-30）两个确切版本。
+### 详情页：只放一张预览图
+
+按舰队 `docs/display-contract.md`，插件详情页**不再回退到 README**，而是由 `meta.detail` 指向的
+Markdown 承载，且该文档正文**只允许一行图片引用**：
+
+| 语言 | `meta.detail` | 预览图 |
+|---|---|---|
+| `en` | `docs/DETAIL.md` | `docs/preview.svg` |
+| `zh` | `docs/DETAIL.zh.md` | `docs/preview.zh.svg` |
+
+两张图同构、只换语言，画的是本插件真实支撑的两个面板（`web_search` 的 Tavily 合成答案 + 来源卡片，
+`web_fetch` 的 Firecrawl Markdown 正文）以及底部多密钥轮询条（两把可用、一把 429 冷却中）。
+画幅固定 640×300 逻辑比例（这里用 1280×600），只使用飞书画板可解析的元素，且完全自包含。
+
+`docs/PREVIEW.md` 记录飞书画板的往返约定；`scripts/preview.mjs` 提供离线校验
+（`npm run preview:check`，已挂在 `npm run check` 最前面），`push` / `pull` 需要飞书授权，不进日常检查。
+
+`package.json#files` 必须包含 `docs`，否则图不会进 tarball，装完后详情页是一片空白**且不会有任何报错**。
+
+### 自动版本检测（「版本」区块）
+
+DSH 0.2.2 线起，插件详情页有 **「版本 / Versions」** 区块，可一键原地更新。它的判定条件之一是
+`engines.dsh` 必须接受更新目标版本，否则目标被判 `incompatible-version`：
+
+- 本包 `engines.dsh` 为 `>=0.2.2-rc.1 <0.3.0`，由 `toolchain.json` 的 `minor-line` 策略派生，**不手写**。
+- DSH 用 `semver.satisfies(..., { includePrerelease: true })` 判定，所以该 range **接受** `0.2.2-rc.1`。
+  不要按严格 SemVer 的直觉把它收窄成 `^0.2.2` —— 那会挡住预发布版本。
+- 该能力还要求**从 npm registry 以本包自己的包名安装**。`github:` / `git+` / `file:` / tarball
+  安装**永远没有**「版本」区块，只能卸载重装。因此 npm 是唯一受支持的交付渠道。
+
+`package.json#dsh.manifestVersion` 为 `1`。`engines.dsh` 声明本包真实挂载验证过的 DSH 行：range 只是文档，不是证据，实际挂载并记录在 `compatibility.json` 的目前只有 `0.2.2-rc.1`（2026-11-08）这一条确切版本。
 
 ## 配置
 
@@ -203,10 +238,9 @@ FIRECRAWL_API_KEYS=fc-aaaa;fc-bbbb
 
 | DSH 版本 | 结果 | 验证日期 | 说明 |
 |---|---|---|---|
-| 0.1.7-rc.2 | 挂载验证通过 | 2026-09-28 | 由舰队集成方在隔离 profile 中执行 `--dump-config` + 有界真实启动 |
-| 0.2.0-rc.2 | 挂载验证通过 | 2026-09-30 | 应用更新到新线后的复验：0.2.0 运行时先**硬拒绝**了旧的 `<0.2.0` 范围（实验证据已存档），按「DSH 升级」流程重新 Inspect 后扩展 `engines.dsh` 与 peer 范围，再以最终 tarball 通过同一套门禁 |
+| 0.2.2-rc.1 | 挂载验证通过 | 2026-11-08 | 0.2.2 线迁移 + 展示契约接入：`engines.dsh` 收窄为本行、peers 升到 `^0.2.2-rc.1`、cordis `~4.1.0`；以最终 tarball 在全新隔离 profile 通过 `--dump-config`（`searchProvider: tavily` / `fetchProvider: firecrawl`）、有界真实启动（零 `did not activate` / waiting / error）、以及展示元数据经 Node ESM resolver 读取校验 |
 
-机器可读证据记录在 `compatibility.json`（两条 `passed` 记录：`0.1.7-rc.2` / `2026-09-28` 与 `0.2.0-rc.2` / `2026-09-30`，checks 含 `dump-config`、`bounded-startup`、`display-metadata`；下面只是每条记录的形状）：
+机器可读证据记录在 `compatibility.json`（一条 `passed` 记录：`0.2.2-rc.1` / `2026-11-08`，checks 含 `dump-config`、`bounded-startup`、`display-metadata`、`web-ui-detail-preview`；下面只是该记录的形状）：
 
 ```json
 {
@@ -216,6 +250,9 @@ FIRECRAWL_API_KEYS=fc-aaaa;fc-bbbb
   "checks": ["dump-config", "bounded-startup"]
 }
 ```
+
+> 历史说明：`0.1.7-rc.2`（2026-09-28）与 `0.2.0-rc.2`（2026-09-30）两条旧记录在 0.2.2 线迁移时被替换，
+> 因为 `engines.dsh` 现在只声明本包真实挂载验证过的那一行；继续保留旧行会让 range 与实际证据脱节。
 
 Peer range 不是兼容性证据。写入证据后必须重新生成并挂载将要发布的最终 tarball，避免只验证了缺少证据文件的预备包。
 
@@ -237,7 +274,7 @@ Peer range 不是兼容性证据。写入证据后必须重新生成并挂载将
 
 - 冷却状态在内存中，重启 dsh 即清空（配额类错误也因此可能被提前重试）。
 - Key 池为空时，seam 只会给出通用的 `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`；带每个 Key 状态与恢复时间的详细消息需要**至少一个 Key**。首次凭据解析完成后若仍无 Key，会打一条 `ctx.logger.warn` 提示该侧没有凭据。
-- **配置页依赖 DSH 的凭据服务与 `plugins.bundle.config` 槽**：两者在 `0.1.7-rc.2` / `0.2.0-rc.2` 都存在；如果某个组合缺失，配置页不会注册（浏览器半也不加载），此时仍可用环境变量或插件行 `config` 供 Key。
+- **配置页依赖 DSH 的凭据服务与 `plugins.bundle.config` 槽**：两者在 `0.2.2-rc.1` 都存在；如果某个组合缺失，配置页不会注册（浏览器半也不加载），此时仍可用环境变量或插件行 `config` 供 Key。
 - **配置页只能保存/清除，不显示已存 Key 的内容**：凭据服务与 Remote 都不回传明文，页面只显示「已保存 / 未保存 / 由环境提供」。
 - **清除了仍可能有 Key**：清除只删凭据存储里的值；若同一引用在环境或 `.env` 里还有值，下一次请求仍会解析到它。
 - Firecrawl 侧只使用 seam 请求的 `url`，忽略其未来可能新增的其它选项（`web_fetch` 工具当前也只发送 `url`）。

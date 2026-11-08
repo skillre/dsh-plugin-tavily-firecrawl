@@ -1,6 +1,6 @@
 {
   "name": "@skillre/dsh-plugin-tavily-firecrawl",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Tavily search and Firecrawl fetch providers for the DeepSeek Harness web seam, with a rotating multi-key credential pool",
   "icon": "./icon.svg",
   "type": "module",
@@ -8,7 +8,7 @@
   "author": "skillre",
   "engines": {
     "node": "^22.19.0 || >=24.0.0",
-    "dsh": ">=0.1.7-rc.2 <0.2.0 || >=0.2.0-rc.2 <0.3.0"
+    "dsh": ">=0.2.2-rc.1 <0.3.0"
   },
   "packageManager": "npm@11.12.1",
   "main": "lib/index.js",
@@ -32,6 +32,7 @@
     "compatibility.json",
     "locale/*.json",
     "icon.svg",
+    "docs",
     "README.md",
     "README.en.md",
     "UNINSTALL.md",
@@ -64,11 +65,12 @@
   },
   "scripts": {
     "clean": "node scripts/clean.mjs",
+    "preview:check": "node scripts/preview.mjs check",
     "build": "npm run clean && tsc -p tsconfig.build.json && npm run build:client",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json --noEmit",
     "test": "npm run build:client && vitest run",
     "pack:check": "npm run build && publint && npm pack --dry-run --json --ignore-scripts",
-    "check": "npm run typecheck && npm test && npm run pack:check && npm run artifacts:check",
+    "check": "npm run preview:check && npm run typecheck && npm test && npm run pack:check && npm run artifacts:check",
     "changeset": "changeset",
     "version": "changeset version",
     "release:prepare": "node scripts/prepare-release.mjs",
@@ -80,17 +82,17 @@
     "@deepseek-ai/schemastery": "^3.18.4"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.3",
-    "@deepseek-ai/dsh-launch-environment": "^0.1.7-rc.2 || ^0.2.0-rc.2",
-    "@deepseek-ai/dsh-web": "^0.1.7-rc.2 || ^0.2.0-rc.2"
+    "@deepseek-ai/cordis": "~4.1.0",
+    "@deepseek-ai/dsh-launch-environment": "^0.2.2-rc.1",
+    "@deepseek-ai/dsh-web": "^0.2.2-rc.1"
   },
   "devDependencies": {
     "@changesets/cli": "^3.0.2",
-    "@deepseek-ai/cordis": "^4.0.3",
-    "@deepseek-ai/dsh-credentials": "0.2.0-rc.2",
-    "@deepseek-ai/dsh-launch-environment": "^0.1.7-rc.2 || ^0.2.0-rc.2",
-    "@deepseek-ai/dsh-settings": "0.2.0-rc.2",
-    "@deepseek-ai/dsh-web": "^0.1.7-rc.2 || ^0.2.0-rc.2",
+    "@deepseek-ai/cordis": "4.1.0",
+    "@deepseek-ai/dsh-credentials": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-launch-environment": "^0.2.2-rc.1",
+    "@deepseek-ai/dsh-settings": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-web": "^0.2.2-rc.1",
     "@types/node": "^24.13.3",
     "@types/react": "~18.3.1",
     "@types/react-dom": "^18.3.1",

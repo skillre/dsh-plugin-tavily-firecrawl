@@ -3,6 +3,44 @@
 This file is maintained by Changesets. Entries below record product history that predates
 the first publication; the package has not been released yet.
 
+## 0.2.0
+
+### Minor Changes
+
+- Adopt the fleet display contract and move onto the DSH 0.2.2-rc.1 line.
+  
+  **Plugin card and detail page (the display contract).** The card is no longer
+  just a title: `locale/en.json` and the new `locale/zh.json` both carry
+  `meta.title`, a one-sentence `meta.description` and `meta.detail`, and the
+  detail page is now a single preview image instead of the README. Two new
+  `docs/preview*.svg` banners show the two panels this plugin actually backs —
+  `web_search` returning a Tavily answer with cited sources, and `web_fetch`
+  returning Firecrawl markdown — plus the multi-key pool rotating past a cooled
+  credential. `docs/DETAIL.md` / `docs/DETAIL.zh.md` carry only that image,
+  `docs/PREVIEW.md` records the Feishu whiteboard round-trip, and `scripts/preview.mjs`
+  validates the artwork offline. `package.json#files` now ships `docs`, without
+  which the published tarball would render a blank detail page with no error
+  anywhere.
+  
+  **Automatic version detection.** `engines.dsh` now states the line this
+  package is actually mounted and tested on, `>=0.2.2-rc.1 <0.3.0`, instead of
+  the older two-line range that stopped at `0.2.0-rc.2`. The DSH plugin manager
+  judges an update target against this field with `includePrerelease`, so the
+  previous range would have had every `0.2.2-rc.1` update refused as
+  `incompatible-version` even though the plugin runs there. `@deepseek-ai/cordis`
+  is now the `~4.1.0` peer with a `4.1.0` development pin, and the DSH peers and
+  development dependencies move to `^0.2.2-rc.1`. The lockfile is regenerated
+  because the old resolution pinned Cordis 4.0.x.
+  
+  **Verification.** Mounted as a packed tarball in a fresh disposable profile:
+  `--dump-config` shows `searchProvider: tavily` / `fetchProvider: firecrawl`,
+  and a bounded startup reaches its listen URL with no `did not activate`,
+  waiting or error lines. `compatibility.json` now records one `0.2.2-rc.1`
+  record with `dump-config`, `bounded-startup`, `display-metadata` and
+  `web-ui-detail-preview`. The `web` seam is unchanged apart from two new
+  optional members (`WebSearchProvider.ready?()`, `WebSearchSource.summary`),
+  which this implementation does not need to adopt.
+
 ## 0.1.0 — 2026-09-28
 
 First fleet release of `@skillre/dsh-plugin-tavily-firecrawl`: the native TypeScript port of the

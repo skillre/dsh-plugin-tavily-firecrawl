@@ -62,7 +62,7 @@ Update: the user selects a verified compatible version in the same **Plugins** m
 4. Promote verified behavior into TypeScript, configuration schemas, tests and Bundle composition.
 5. Prove that every side effect is removed on stop or update.
 
-Every runtime contract this package uses (`ctx.web` `registerSearchProvider` / `registerFetchProvider` bound to the current Fiber through `ctx.effect`; duplicate ids throwing `WebError('…already registered', 'WEB_DUPLICATE_PROVIDER')`; the selection rules; `WEB_PROVIDER_CONFIGURED_MISSING` / `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`; `search()` truncating `sources[]` to `maxResults` and setting `truncated`; a non-2xx fetched page being a result rather than a throw) was verified through live Inspect plus the shipped sources on DSH `0.1.7-rc.2` (`2026-09-28`) and again on `0.2.0-rc.2` (`2026-09-30`, after the app updated: identical `web` seam signatures and unchanged shipped composition rows).
+Every runtime contract this package uses (`ctx.web` `registerSearchProvider` / `registerFetchProvider` bound to the current Fiber through `ctx.effect`; duplicate ids throwing `WebError('…already registered', 'WEB_DUPLICATE_PROVIDER')`; the selection rules; `WEB_PROVIDER_CONFIGURED_MISSING` / `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`; `search()` truncating `sources[]` to `maxResults` and setting `truncated`; a non-2xx fetched page being a result rather than a throw) was verified through live Inspect plus the shipped sources on DSH `0.2.2-rc.1` (`2026-11-08`): all four signatures are byte-identical to `0.2.0-rc.2`. That line adds two **optional** members — `WebSearchProvider.ready?()` / `WebFetchProvider.ready?()` and `WebSearchSource.summary?` — which are not breaking and need no implementation here (the seam treats a provider without `ready()` as ready).
 
 ## Bundle identity
 
@@ -91,12 +91,49 @@ DSH reads a plugin card **without activating the plugin**, so these resources mu
 
 What this package actually ships:
 
-- card title: `Tavily Search + Firecrawl Fetch`
-- card description: `Tavily search and Firecrawl fetch providers for the DeepSeek Harness web seam, with a rotating multi-key credential pool`
-- icon: `icon.svg` (the DSH fleet default icon; replace it with this plugin's own mark before release)
-- shipped locales: **`locale/en.json` only**, so the card's title and description are English-only (this README has a Chinese twin; the card text does not)
+- card title: `Tavily Search + Firecrawl Fetch` / `Tavily 搜索 + Firecrawl 抓取`
+- card description: `Swaps DSH web search and page fetch onto Tavily and Firecrawl, with a multi-key pool that rotates past rate limits.`
+  (Chinese: `把 DSH 的联网搜索与网页抓取换成 Tavily 和 Firecrawl，多密钥池自动轮询，绕过单账号限流。`)
+- icon: `icon.svg`
+- shipped locales: `locale/en.json` and `locale/zh.json`, so both the card text and the detail page exist in both languages
 
-`package.json#dsh.manifestVersion` is `1`. `engines.dsh` states the DSH lines this package was really mounted and tested against: a range is documentation, not evidence — the only exact versions mounted and recorded in `compatibility.json` are `0.1.7-rc.2` (2026-09-28) and `0.2.0-rc.2` (2026-09-30).
+### Detail page: one preview image, nothing else
+
+Per the fleet's `docs/display-contract.md`, the plugin detail page **no longer falls back to the README**.
+It is carried by the Markdown `meta.detail` names, and that document's body may contain **exactly one image reference**:
+
+| Language | `meta.detail` | Preview image |
+|---|---|---|
+| `en` | `docs/DETAIL.md` | `docs/preview.svg` |
+| `zh` | `docs/DETAIL.zh.md` | `docs/preview.zh.svg` |
+
+The two images are isomorphic and differ only in language. They show the two panels this plugin really backs —
+`web_search` returning a Tavily answer with cited sources, and `web_fetch` returning Firecrawl markdown — plus a
+multi-key pool strip underneath (two keys ready, one cooling down after a 429). The artwork is a fixed 640×300
+logical ratio (drawn at 1280×600), uses only elements the Feishu whiteboard parser keeps editable, and is fully
+self-contained.
+
+`docs/PREVIEW.md` records the whiteboard round-trip; `scripts/preview.mjs` validates the artwork offline
+(`npm run preview:check`, wired first in `npm run check`), while `push` / `pull` need Lark authorization and stay
+out of the everyday check.
+
+`package.json#files` must include `docs`, or the images never reach the tarball and the installed detail page
+renders blank **with no error reported anywhere**.
+
+### Automatic version detection (the "Versions" section)
+
+From the DSH 0.2.2 line on, the plugin detail page carries a **Versions** section with one-click in-place update.
+One of its conditions is that `engines.dsh` accepts the update target; otherwise the target is refused as
+`incompatible-version`:
+
+- `engines.dsh` here is `>=0.2.2-rc.1 <0.3.0`, derived from `toolchain.json`'s `minor-line` policy — **never hand-written**.
+- DSH judges it with `semver.satisfies(..., { includePrerelease: true })`, so this range **accepts** `0.2.2-rc.1`.
+  Do not narrow it to something like `^0.2.2` out of strict-SemVer instinct: that would reject the prerelease.
+- The capability also requires installing **from an npm registry under this package's own name**. Installs via
+  `github:` / `git+` / `file:` / tarball **never** get a Versions section and can only be updated by uninstall +
+  reinstall, so npm is the only supported delivery channel.
+
+`package.json#dsh.manifestVersion` is `1`. `engines.dsh` states the DSH line this package was really mounted and tested against: a range is documentation, not evidence — the only exact version mounted and recorded in `compatibility.json` is `0.2.2-rc.1` (2026-11-08).
 
 ## Configuration
 
@@ -204,10 +241,9 @@ Cooldowns live in memory and are **cleared by a restart**.
 
 | DSH version | Result | Verified | Notes |
 |---|---|---|---|
-| 0.1.7-rc.2 | Mount verification passed | 2026-09-28 | Isolated-profile `--dump-config` plus a bounded real startup, performed by the fleet integrator |
-| 0.2.0-rc.2 | Mount verification passed | 2026-09-30 | Re-verification after the app moved to the new line: 0.2.0 first **hard-rejected** the old `<0.2.0` ranges (experiment archived), then `engines.dsh` and the peer ranges were widened per the DSH-upgrade procedure after re-inspection, and the final tarball passed the same gates |
+| 0.2.2-rc.1 | Mount verification passed | 2026-11-08 | 0.2.2-line migration plus display-contract adoption: `engines.dsh` narrowed to this line, peers moved to `^0.2.2-rc.1`, Cordis to `~4.1.0`; the final tarball passed `--dump-config` in a fresh isolated profile (`searchProvider: tavily` / `fetchProvider: firecrawl`), a bounded real startup (zero `did not activate` / waiting / error lines), and display-metadata resolution through the Node ESM resolver |
 
-Machine-readable evidence lives in `compatibility.json` (two `passed` records: `0.1.7-rc.2` / `2026-09-28` and `0.2.0-rc.2` / `2026-09-30`, checks covering `dump-config`, `bounded-startup`, `display-metadata`; the block below only shows the shape of each record):
+Machine-readable evidence lives in `compatibility.json` (one `passed` record: `0.2.2-rc.1` / `2026-11-08`, checks covering `dump-config`, `bounded-startup`, `display-metadata` and `web-ui-detail-preview`; the block below only shows that record's shape):
 
 ```json
 {
@@ -217,6 +253,10 @@ Machine-readable evidence lives in `compatibility.json` (two `passed` records: `
   "checks": ["dump-config", "bounded-startup"]
 }
 ```
+
+> History: the `0.1.7-rc.2` (2026-09-28) and `0.2.0-rc.2` (2026-09-30) records were replaced during the 0.2.2-line
+> migration, because `engines.dsh` now states only the line this package was really mounted and tested on. Keeping
+> the old records would decouple the range from the actual evidence.
 
 A peer range is not compatibility evidence. After recording evidence, rebuild and mount the exact final tarball so the tested artifact also contains that evidence.
 
@@ -238,7 +278,7 @@ See [UNINSTALL.md](UNINSTALL.md).
 
 - Cooldowns are in memory and reset on restart (so a quota refusal can be retried earlier than intended).
 - With an empty key pool the seam reports only its generic `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`; the rich per-key state and recovery estimate need **at least one key**. A `ctx.logger.warn` is emitted once the first credential read settles with no key.
-- **The configuration page needs DSH's credentials service and the `plugins.bundle.config` slot**: both exist on `0.1.7-rc.2` and `0.2.0-rc.2`; on a composition without them the page is not registered (the browser half does not load either) and keys come from the environment or the plugin row's `config` as before.
+- **The configuration page needs DSH's credentials service and the `plugins.bundle.config` slot**: both exist on `0.2.2-rc.1`; on a composition without them the page is not registered (the browser half does not load either) and keys come from the environment or the plugin row's `config` as before.
 - **The page saves and clears, it never displays a stored key**: neither the credentials service nor its Remote namespace returns the literal, so the page shows only "stored / not stored / supplied by the environment".
 - **Clearing may still leave a key**: clearing removes only the stored value, so a value for the same reference in the environment or a `.env` file keeps answering on the next request.
 - The Firecrawl side uses only the seam request's `url` and ignores any other option a future seam revision might add (`web_fetch` currently sends `url` only).
